@@ -1,6 +1,6 @@
 'use strict';
 
-const MSG_BASE = 'Bom dia! Poderia me dizer se os veículos abaixo estão rodando ou se estão retidos, por favor? De preferência, o mais breve possível.';
+const MSG_BASE = 'Boa noite! Poderia me dizer se os veículos abaixo estão rodando ou se estão retidos, por favor? De preferência, o mais breve possível.';
 
 /* ===================== COPYS ===================== */
 function agruparPorFilial(resultados) {
