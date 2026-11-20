@@ -2,7 +2,7 @@
 
 /* ===== Limites (pontos que podem precisar ajuste) ===== */
 const LIMITE_HORAS_GPS = 60;
-const LIMITE_HORAS_DVR = 12; // se a fonte já filtra 48h e você quiser espelhar, troque aqui
+const LIMITE_HORAS_DVR = 60; // se a fonte já filtra 48h e você quiser espelhar, troque aqui
 
 function buscarAlocacao(alocacao, veiculo) {
   for (const a of alocacao) if (a.ordem === veiculo) return a;
