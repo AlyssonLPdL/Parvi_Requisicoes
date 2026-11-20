@@ -8,12 +8,17 @@
 </head>
 <body>
   <header class="topo">
-    <h1>GPS/DVR Inoperante</h1>
-    <nav class="tabs">
-      <button class="tab" data-tab="gps">GPS</button>
-      <button class="tab" data-tab="dvr">DVR</button>
-      <button class="tab" data-tab="insumos">Insumos</button>
-    </nav>
+    <div class="topo-inner">
+      <div class="topo-titulo">
+        <h1>GPS / DVR Inoperante</h1>
+        <p class="subtitulo">Análise de veículos inoperantes e geração de copys por filial</p>
+      </div>
+      <nav class="tabs" role="tablist">
+        <button class="tab" data-tab="gps" role="tab">GPS</button>
+        <button class="tab" data-tab="dvr" role="tab">DVR</button>
+        <button class="tab" data-tab="insumos" role="tab">Insumos</button>
+      </nav>
+    </div>
   </header>
 
   <main>
@@ -21,15 +26,27 @@
     <section id="painel-insumos" class="painel" hidden>
       <div id="alarme-insumos" class="alarme" hidden></div>
 
-      <label class="campo">
-        <span>Alocação <small>(colar com cabeçalho)</small></span>
-        <textarea id="txt-alocacao" rows="10" spellcheck="false"></textarea>
-      </label>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-titulo">
+            <h2>Alocação</h2>
+            <p class="card-desc">Colunas usadas: <strong>Nº ORDEM</strong> e <strong>LOCALIZADO</strong>. Válida por 7 dias.</p>
+          </div>
+        </div>
+        <textarea id="txt-alocacao" rows="10" spellcheck="false"
+          placeholder="Cole aqui a planilha completa, com cabeçalho."></textarea>
+      </div>
 
-      <label class="campo">
-        <span>Retidos <small>(uma coluna, um por linha, com cabeçalho)</small></span>
-        <textarea id="txt-retidos" rows="10" spellcheck="false"></textarea>
-      </label>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-titulo">
+            <h2>Retidos</h2>
+            <p class="card-desc">Apenas a coluna de veículos (com cabeçalho). Válida por 7 dias.</p>
+          </div>
+        </div>
+        <textarea id="txt-retidos" rows="10" spellcheck="false"
+          placeholder="Cole aqui a coluna de veículos retidos, um por linha, com cabeçalho."></textarea>
+      </div>
 
       <div class="acoes">
         <button id="btn-salvar-insumos" class="btn btn-primario">Salvar insumos</button>
@@ -39,33 +56,67 @@
 
     <!-- ========== GPS ========== -->
     <section id="painel-gps" class="painel" hidden>
-      <label class="campo">
-        <span>Veículos GPS <small>(colar com cabeçalho — Agrupamento / Últimas coordenadas / Localização)</small></span>
-        <textarea id="veic-gps" rows="8" spellcheck="false"></textarea>
-      </label>
-      <label class="campo">
-        <span>Chamados abertos <small>(colar toda execução)</small></span>
-        <textarea id="cham-gps" rows="8" spellcheck="false"></textarea>
-      </label>
-      <div class="acoes">
-        <button id="btn-processar-gps" class="btn btn-primario">Processar</button>
+      <div class="card">
+        <div class="card-header">
+          <span class="step">1</span>
+          <div class="card-titulo">
+            <h2>Veículos GPS</h2>
+            <p class="card-desc">Colunas: <strong>Agrupamento</strong> · <strong>Últimas coordenadas</strong> · <strong>Localização</strong> (com cabeçalho).</p>
+          </div>
+        </div>
+        <textarea id="veic-gps" rows="8" spellcheck="false"
+          placeholder="Cole aqui a planilha do RCR (Últimas posições), com cabeçalho."></textarea>
       </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="step">2</span>
+          <div class="card-titulo">
+            <h2>Chamados abertos</h2>
+            <p class="card-desc">Cole a planilha de O.S. completa. Filtro automático: código <strong>8</strong> (GPS) + Data Resolução vazia.</p>
+          </div>
+        </div>
+        <textarea id="cham-gps" rows="8" spellcheck="false"
+          placeholder="Cole aqui a planilha de chamados abertos, com cabeçalho."></textarea>
+      </div>
+
+      <div class="acoes">
+        <button id="btn-processar-gps" class="btn btn-primario">Processar GPS</button>
+      </div>
+
       <div id="result-gps" class="resultado"></div>
     </section>
 
     <!-- ========== DVR ========== -->
     <section id="painel-dvr" class="painel" hidden>
-      <label class="campo">
-        <span>Veículos DVR <small>(blocos de 2 linhas: veículo / tempo)</small></span>
-        <textarea id="veic-dvr" rows="8" spellcheck="false"></textarea>
-      </label>
-      <label class="campo">
-        <span>Chamados abertos <small>(colar toda execução)</small></span>
-        <textarea id="cham-dvr" rows="8" spellcheck="false"></textarea>
-      </label>
-      <div class="acoes">
-        <button id="btn-processar-dvr" class="btn btn-primario">Processar</button>
+      <div class="card">
+        <div class="card-header">
+          <span class="step">1</span>
+          <div class="card-titulo">
+            <h2>Veículos DVR</h2>
+            <p class="card-desc">Blocos de 2 linhas: veículo na primeira, tempo na segunda.</p>
+          </div>
+        </div>
+        <textarea id="veic-dvr" rows="8" spellcheck="false"
+          placeholder="Ex:&#10;57014&#10;2d 01:10:26&#10;&#10;35012&#10;2d 01:17:37"></textarea>
       </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="step">2</span>
+          <div class="card-titulo">
+            <h2>Chamados abertos</h2>
+            <p class="card-desc">Cole a planilha de O.S. completa. Filtro automático: código <strong>7</strong> (DVR) + Data Resolução vazia.</p>
+          </div>
+        </div>
+        <textarea id="cham-dvr" rows="8" spellcheck="false"
+          placeholder="Cole aqui a planilha de chamados abertos, com cabeçalho."></textarea>
+      </div>
+
+      <div class="acoes">
+        <button id="btn-processar-dvr" class="btn btn-primario">Processar DVR</button>
+      </div>
+
       <div id="result-dvr" class="resultado"></div>
     </section>
   </main>
