@@ -88,7 +88,7 @@ function processar(tipo) {
 
   const box = limparResultado(tipo);
   renderResumo(box, resultados);
-  renderCopys(box, resultados);
+  renderCopys(box, resultados, tipo);
   renderTabela(box, resultados, tipo);
   renderDownloads(box, resultados, tipo);
 }
