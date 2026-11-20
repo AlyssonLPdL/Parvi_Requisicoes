@@ -2,12 +2,18 @@
 
 const MSG_BASE = 'Boa noite! Poderia me dizer se os veículos abaixo estão rodando ou se estão retidos, por favor? De preferência, o mais breve possível.';
 
+function nomeEquipamento(tipo) {
+  if (tipo === 'gps') return 'GPS inoperante';
+  if (tipo === 'dvr') return 'DVR inoperante';
+  return 'Equipamento inoperante';
+}
+
 /* ===================== COPYS ===================== */
 function agruparPorFilial(resultados) {
   const mapa = {};
   for (const r of resultados) {
     if (!r.aprovado) continue;
-    if (r.status !== 'Abrir') continue; // somente "Abrir" entram nos copys
+    if (r.status !== 'Abrir') continue;
     if (!mapa[r.filial]) mapa[r.filial] = [];
     mapa[r.filial].push(r);
   }
@@ -20,19 +26,21 @@ function agruparPorFilial(resultados) {
   return saida;
 }
 
-function textoCopy(grupo) {
+function textoCopy(grupo, tipo) {
   let t = MSG_BASE + '\n\n';
-  t += 'Veículo | Tempo inoperante\n';
+  t += '🔧 ' + nomeEquipamento(tipo) + '\n\n';
   for (const v of grupo.veiculos) {
-    t += v.veiculo + ' | ' + v.tempoFormatado + '\n';
+    t += 'Veículo ' + v.veiculo + '  —  inoperante há ' + v.tempoFormatado + '\n';
   }
   return t.replace(/\n$/, '');
 }
 
-function renderCopys(container, resultados) {
+function renderCopys(container, resultados, tipo) {
   const grupos = agruparPorFilial(resultados);
   const card = el('div', { class: 'card' });
-  card.appendChild(el('h2', { text: 'Copys por filial (status "Abrir")' }));
+  card.appendChild(el('h2', {
+    text: 'Copys por filial — ' + nomeEquipamento(tipo) + ' (status "Abrir")'
+  }));
 
   if (!grupos.length) {
     card.appendChild(el('div', { class: 'vazio',
@@ -44,20 +52,22 @@ function renderCopys(container, resultados) {
   for (const g of grupos) {
     const bloco = el('div', { class: 'copy-bloco' });
     const header = el('div', { class: 'copy-header' });
-    header.appendChild(el('span', { class: 'copy-filial', text: g.filial + ' (' + g.veiculos.length + ')' }));
+    header.appendChild(el('span', {
+      class: 'copy-filial',
+      text: g.filial + ' (' + g.veiculos.length + ')'
+    }));
 
     const btn = el('button', {
       class: 'btn btn-pequeno',
       text: 'Copiar',
       onclick: () => {
-        const txt = textoCopy(g);
+        const txt = textoCopy(g, tipo);
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(txt).then(() => {
             btn.textContent = 'Copiado!';
             setTimeout(() => { btn.textContent = 'Copiar'; }, 1500);
           });
         } else {
-          // fallback
           const ta = document.createElement('textarea');
           ta.value = txt;
           document.body.appendChild(ta);
@@ -73,8 +83,8 @@ function renderCopys(container, resultados) {
     header.appendChild(btn);
     bloco.appendChild(header);
 
-    const pre = el('pre');
-    pre.textContent = textoCopy(g);
+    const pre = el('pre', { class: 'copy-preview' });
+    pre.textContent = textoCopy(g, tipo);
     bloco.appendChild(pre);
     card.appendChild(bloco);
   }
