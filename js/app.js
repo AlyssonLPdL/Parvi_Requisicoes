@@ -2,31 +2,23 @@
 
 /* ===================== ABAS ===================== */
 function ativarAba(nome) {
-  // Atualiza a classe de todos os botões da sidebar
   document.querySelectorAll('.tab').forEach(b => {
     b.classList.toggle('ativo', b.dataset.tab === nome);
   });
 
-  // Mostra o painel correto e esconde os outros
   document.querySelectorAll('.painel').forEach(p => {
     p.hidden = (p.id !== 'painel-' + nome);
   });
 
-  // Atualiza as telas específicas
   if (nome === 'insumos') renderInsumos();
   if (nome === 'consultas') {
-    // Limpa a busca e foca no input quando entrar na aba
     const input = document.getElementById('input-busca');
-    if(input) {
-        input.value = '';
-        setTimeout(() => input.focus(), 100);
-    }
+    if(input) { input.value = ''; setTimeout(() => input.focus(), 100); }
     const res = document.getElementById('resultado-busca');
     if(res) res.innerHTML = '';
   }
 }
 
-// Adiciona o evento de clique em todos os botões com a classe .tab
 document.querySelectorAll('.tab').forEach(btn => {
   btn.addEventListener('click', () => ativarAba(btn.dataset.tab));
 });
@@ -35,18 +27,15 @@ document.querySelectorAll('.tab').forEach(btn => {
 function renderInsumos() {
   const ins = carregarInsumos();
   
-  // Preenche os campos com o que está salvo
   document.getElementById('txt-alocacao').value = ins.alocacao.texto;
   document.getElementById('txt-retidos').value  = ins.retidos.texto;
   
-  // Preenche o novo campo de motoristas
   const elMot = document.getElementById('txt-motoristas');
   if (elMot) elMot.value = ins.motoristas.texto;
 
   const alarme = document.getElementById('alarme-insumos');
   const partes = [];
   
-  // Verifica o vencimento dos três
   const a1 = textoAlarmeInsumo('Alocação', ins.alocacao);
   const a2 = textoAlarmeInsumo('Retidos',  ins.retidos);
   const a3 = textoAlarmeInsumo('Motoristas', ins.motoristas);
@@ -58,8 +47,7 @@ function renderInsumos() {
   if (partes.length) {
     alarme.hidden = false;
     alarme.textContent = partes.join(' • ');
-    alarme.classList.toggle('vencido',
-      ins.alocacao.vencido || ins.retidos.vencido || ins.motoristas.vencido);
+    alarme.classList.toggle('vencido', ins.alocacao.vencido || ins.retidos.vencido || ins.motoristas.vencido);
   } else {
     alarme.hidden = true;
   }
@@ -72,7 +60,7 @@ if (btnSalvarInsumos) {
     const ret  = document.getElementById('txt-retidos').value;
     const mot  = document.getElementById('txt-motoristas') ? document.getElementById('txt-motoristas').value : '';
     
-    salvarInsumos(aloc, ret, mot); // Agora salva os 3
+    salvarInsumos(aloc, ret, mot);
     
     const st = document.getElementById('status-insumos');
     st.textContent = 'Salvos em ' + new Date().toLocaleString('pt-BR');
@@ -81,7 +69,7 @@ if (btnSalvarInsumos) {
   });
 }
 
-/* ===================== PROCESSAMENTO (GPS/DVR) ===================== */
+/* ===================== PROCESSAMENTO ===================== */
 function limparResultado(tipo) {
   const box = document.getElementById('result-' + tipo);
   if (!box) return null;
@@ -92,15 +80,14 @@ function limparResultado(tipo) {
 function processar(tipo) {
   const ins = carregarInsumos();
 
-  if (ins.alocacao.vencido && !confirm(
-      'Insumos de ALOCAÇÃO vencidos (mais de 7 dias). Processar mesmo assim?')) return;
-  if (ins.retidos.vencido && !confirm(
-      'Insumos de RETIDOS vencidos. Processar mesmo assim?')) return;
+  if (ins.alocacao.vencido && !confirm('Insumos de ALOCAÇÃO vencidos. Processar mesmo assim?')) return;
+  if (ins.retidos.vencido && !confirm('Insumos de RETIDOS vencidos. Processar mesmo assim?')) return;
 
   const alocacao = parseAlocacao(ins.alocacao.texto);
   const retidos  = parseRetidos(ins.retidos.texto);
 
-  if (!alocacao.length) {
+  // CORREÇÃO: Map usa .size, não .length
+  if (!alocacao || alocacao.size === 0) {
     alert('Nenhum registro de alocação encontrado. Salve a alocação na aba Insumos.');
     return;
   }
@@ -124,7 +111,7 @@ function processar(tipo) {
   if (!box) return;
   
   renderResumo(box, resultados);
-  renderCopys(box, resultados, tipo); // Passando o tipo correto
+  renderCopys(box, resultados, tipo); 
   renderTabela(box, resultados, tipo);
   renderDownloads(box, resultados, tipo);
 }
@@ -137,6 +124,5 @@ if (btnDvr) btnDvr.addEventListener('click', () => processar('dvr'));
 
 /* ===================== INICIALIZAÇÃO ===================== */
 document.addEventListener('DOMContentLoaded', () => {
-  // Inicia na aba GPS por padrão
   ativarAba('gps');
 });
