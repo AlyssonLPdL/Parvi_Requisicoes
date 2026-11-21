@@ -1,6 +1,5 @@
 'use strict';
 
-// Algoritmo para calcular a distância entre duas palavras (tolerância a erros de digitação)
 function levenshtein(a, b) {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
@@ -13,9 +12,9 @@ function levenshtein(a, b) {
         matrix[i][j] = matrix[i - 1][j - 1];
       } else {
         matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substituição
-          matrix[i][j - 1] + 1,     // inserção
-          matrix[i - 1][j] + 1      // remoção
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
         );
       }
     }
@@ -37,7 +36,7 @@ function realizarBusca() {
   const ins = carregarInsumos();
   const queryNorm = normalizarTexto(query);
   
-  // 1. Tenta buscar por PLACA (se tiver letras e números juntos, ou se for só números, mas tamanho de placa)
+  // 1. Tenta buscar por PLACA
   const isPlaca = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/i.test(query) || /^[A-Z]{3}[0-9]{4}$/i.test(query);
   
   if (isPlaca && ins.alocacao.texto) {
@@ -46,41 +45,39 @@ function realizarBusca() {
       let achou = false;
       
       for (const [veiculo, dados] of alocacaoMap.entries()) {
-        if (dados.placa.toUpperCase().includes(query.toUpperCase())) {
+        if (dados.placa && dados.placa.toUpperCase().includes(query.toUpperCase())) {
           achou = true;
           renderResultadoBusca(container, `Placa Encontrada: ${dados.placa}`, [
-            `Nº ORDEM: ${veiculo}`,
-            `Filial: ${dados.filial || dados.localizado_original}`,
-            `Linha Original:`,
-            dados.linha_original
+            `<strong>Nº ORDEM:</strong> ${veiculo}`,
+            `<strong>Filial:</strong> ${dados.filial || dados.localizado_original}`,
+            `<div style="margin-top:8px; color:var(--text-muted); font-size:12px;">Linha Original da Alocação:</div>`,
+            `<div style="word-break: break-all;">${dados.linha_original}</div>`
           ]);
         }
       }
       if (!achou) container.innerHTML = '<div class="vazio">Nenhuma placa encontrada na alocação.</div>';
-      return; // Se era placa, para aqui.
-    } catch(e) {}
+      return;
+    } catch(e) {
+        console.error("Erro ao buscar placa:", e);
+    }
   }
 
-  // 2. Se não for placa, busca Motoristas (Nome ou Matrícula)
-  if (ins.motoristas.texto) {
+  // 2. Busca Motoristas
+  if (ins.motoristas && ins.motoristas.texto) {
     const motoristas = parseMotoristas(ins.motoristas.texto);
     
-    // Filtra os motoristas usando a lógica de proximidade (Fuzzy)
     const resultados = motoristas.filter(m => {
       const nomeNorm = normalizarTexto(m.nome);
       const matNorm = normalizarTexto(m.matricula);
       
-      // Se for busca por matrícula exata
       if (matNorm === queryNorm) return true;
 
-      // Busca por nome (tolerância a erros)
       const queryWords = queryNorm.split(/\s+/);
       const nomeWords = nomeNorm.split(/\s+/);
       
       return queryWords.every(qw => {
         return nomeWords.some(nw => {
           if (nw === qw || nw.startsWith(qw) || qw.startsWith(nw)) return true;
-          // Se a palavra tiver mais de 3 letras, permite errar até 30% das letras
           if (qw.length > 3 && nw.length > 3) {
             const dist = levenshtein(qw, nw);
             return dist <= Math.floor(qw.length / 3);
@@ -92,11 +89,10 @@ function realizarBusca() {
 
     if (resultados.length > 0) {
       for (const m of resultados) {
-        renderResultadoBusca(container, `Motorista Encontrado: ${m.nome}`, [
-          `Matrícula: ${m.matricula}`,
-          `Filial: ${m.filial}`,
-          `Linha Original:`,
-          `${m.filial}\t${m.matricula}\t${m.nome}`
+        renderResultadoBusca(container, `Motorista Encontrado`, [
+          `<strong>Nome:</strong> ${m.nome}`,
+          `<strong>Matrícula:</strong> ${m.matricula}`,
+          `<strong>Filial:</strong> ${m.filial}`
         ]);
       }
     } else {
@@ -111,9 +107,10 @@ function renderResultadoBusca(container, titulo, linhas) {
   const card = document.createElement('div');
   card.className = 'card';
   card.style.marginBottom = '12px';
+  card.style.padding = '16px 20px';
   
-  let html = `<h3 style="margin-top:0; color:var(--primary);">${titulo}</h3>`;
-  html += `<div style="font-size:14px; line-height:1.6; background:var(--surface-alt); padding:12px; border-radius:6px; border:1px solid var(--border); font-family:monospace;">`;
+  let html = `<h3 style="margin-top:0; margin-bottom:12px; color:var(--primary); font-size:16px;">${titulo}</h3>`;
+  html += `<div style="font-size:14px; line-height:1.7;">`;
   
   for (const linha of linhas) {
     html += `<div>${linha}</div>`;
