@@ -1,5 +1,6 @@
 'use strict';
 
+// Algoritmo de Levenshtein (distância entre palavras)
 function levenshtein(a, b) {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
@@ -22,8 +23,15 @@ function levenshtein(a, b) {
   return matrix[b.length][a.length];
 }
 
+// Limpa o texto para busca (tira acentos, pontuações, etc)
 function normalizarTexto(str) {
-  return String(str).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return String(str)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '') // Remove tudo que não for letra ou número
+    .replace(/\s+/g, ' ')        // Troca múltiplos espaços por um só
+    .trim();
 }
 
 function realizarBusca() {
@@ -35,71 +43,98 @@ function realizarBusca() {
 
   const ins = carregarInsumos();
   const queryNorm = normalizarTexto(query);
-  
-  // 1. Tenta buscar por PLACA
-  const isPlaca = /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/i.test(query) || /^[A-Z]{3}[0-9]{4}$/i.test(query);
-  
-  if (isPlaca && ins.alocacao.texto) {
+  let encontrouAlgo = false;
+
+  // ==========================================
+  // 1. BUSCA POR ALOCAÇÃO (PLACA OU Nº ORDEM)
+  // ==========================================
+  if (ins.alocacao && ins.alocacao.texto) {
     try {
       const alocacaoMap = parseAlocacao(ins.alocacao.texto);
-      let achou = false;
       
       for (const [veiculo, dados] of alocacaoMap.entries()) {
-        if (dados.placa && dados.placa.toUpperCase().includes(query.toUpperCase())) {
-          achou = true;
-          renderResultadoBusca(container, `Placa Encontrada: ${dados.placa}`, [
+        const placaNorm = normalizarTexto(dados.placa);
+        
+        if (placaNorm.includes(queryNorm) || veiculo === queryNorm) {
+          encontrouAlgo = true;
+          renderResultadoBusca(container, `Veículo na Alocação`, [
             `<strong>Nº ORDEM:</strong> ${veiculo}`,
+            `<strong>Placa:</strong> ${dados.placa || 'Não informada'}`,
             `<strong>Filial:</strong> ${dados.filial || dados.localizado_original}`,
-            `<div style="margin-top:8px; color:var(--text-muted); font-size:12px;">Linha Original da Alocação:</div>`,
-            `<div style="word-break: break-all;">${dados.linha_original}</div>`
+            `<div style="margin-top:8px; color:var(--text-muted); font-size:12px;">Linha Original:</div>`,
+            `<div style="word-break: break-all; font-family:monospace; font-size:12px;">${dados.linha_original}</div>`
           ]);
         }
       }
-      if (!achou) container.innerHTML = '<div class="vazio">Nenhuma placa encontrada na alocação.</div>';
-      return;
-    } catch(e) {
-        console.error("Erro ao buscar placa:", e);
+    } catch(e) { console.error("Erro alocação:", e); }
+  }
+
+  // ==========================================
+  // 2. BUSCA POR MOTORISTAS (NOME OU MATRÍCULA)
+  // ==========================================
+  if (ins.motoristas && ins.motoristas.texto) {
+    const motoristas = parseMotoristas(ins.motoristas.texto);
+    const queryWords = queryNorm.split(' ');
+
+    const resultados = [];
+
+    for (const m of motoristas) {
+      const nomeNorm = normalizarTexto(m.nome);
+      const matNorm = normalizarTexto(m.matricula);
+
+      // Se digitou a matrícula exata
+      if (matNorm === queryNorm) {
+        resultados.push({ motorista: m, nota: 100 });
+        continue;
+      }
+
+      // Se digitou parte do nome, calcula a nota de semelhança
+      let nota = 0;
+      let acertosPalavras = 0;
+
+      for (const qw of queryWords) {
+        let melhorMatch = 0;
+        const nomeWords = nomeNorm.split(' ');
+        
+        for (const nw of nomeWords) {
+          if (nw === qw) melhorMatch = Math.max(melhorMatch, 100);
+          else if (nw.includes(qw) || qw.includes(nw)) melhorMatch = Math.max(melhorMatch, 80);
+          else {
+            const dist = levenshtein(qw, nw);
+            // Se a distância for pequena em relação ao tamanho da palavra
+            if (dist <= Math.floor(qw.length / 2)) {
+              melhorMatch = Math.max(melhorMatch, 100 - (dist * 10));
+            }
+          }
+        }
+        
+        if (melhorMatch > 0) acertosPalavras++;
+        nota += melhorMatch;
+      }
+
+      // Se acertou pelo menos metade das palavras digitadas, considera válido
+      if (acertosPalavras >= Math.ceil(queryWords.length / 2)) {
+        resultados.push({ motorista: m, nota: nota / queryWords.length });
+      }
+    }
+
+    // Ordena pelos mais parecidos
+    resultados.sort((a, b) => b.nota - a.nota);
+
+    for (const r of resultados) {
+      encontrouAlgo = true;
+      renderResultadoBusca(container, `Motorista Encontrado`, [
+        `<strong>Nome:</strong> ${r.motorista.nome}`,
+        `<strong>Matrícula:</strong> ${r.motorista.matricula}`,
+        `<strong>Filial:</strong> ${r.motorista.filial}`,
+        `<div style="margin-top:8px; color:var(--text-muted); font-size:12px;">Linha Original:</div>`,
+        `<div style="font-family:monospace; font-size:12px; background:#f4f4f4; padding:4px;">${r.motorista.filial}\t${r.motorista.matricula}\t${r.motorista.nome}</div>`
+      ]);
     }
   }
 
-  // 2. Busca Motoristas
-  if (ins.motoristas && ins.motoristas.texto) {
-    const motoristas = parseMotoristas(ins.motoristas.texto);
-    
-    const resultados = motoristas.filter(m => {
-      const nomeNorm = normalizarTexto(m.nome);
-      const matNorm = normalizarTexto(m.matricula);
-      
-      if (matNorm === queryNorm) return true;
-
-      const queryWords = queryNorm.split(/\s+/);
-      const nomeWords = nomeNorm.split(/\s+/);
-      
-      return queryWords.every(qw => {
-        return nomeWords.some(nw => {
-          if (nw === qw || nw.startsWith(qw) || qw.startsWith(nw)) return true;
-          if (qw.length > 3 && nw.length > 3) {
-            const dist = levenshtein(qw, nw);
-            return dist <= Math.floor(qw.length / 3);
-          }
-          return false;
-        });
-      });
-    });
-
-    if (resultados.length > 0) {
-      for (const m of resultados) {
-        renderResultadoBusca(container, `Motorista Encontrado`, [
-          `<strong>Nome:</strong> ${m.nome}`,
-          `<strong>Matrícula:</strong> ${m.matricula}`,
-          `<strong>Filial:</strong> ${m.filial}`
-        ]);
-      }
-    } else {
-      container.innerHTML = '<div class="vazio">Nenhum motorista ou veículo encontrado.</div>';
-    }
-  } else {
-    container.innerHTML = '<div class="vazio">Base de motoristas não cadastrada. Vá em Insumos.</div>';
+  if (!encontrouAlgo) {
+    container.innerHTML = '<div class="vazio">Nenhum motorista ou veículo encontrado com esse termo.</div>';
   }
 }
 
