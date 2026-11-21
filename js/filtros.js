@@ -2,11 +2,12 @@
 
 /* ===== Limites (pontos que podem precisar ajuste) ===== */
 const LIMITE_HORAS_GPS = 60;
-const LIMITE_HORAS_DVR = 60; // se a fonte já filtra 48h e você quiser espelhar, troque aqui
+const LIMITE_HORAS_DVR = 60; // Ajustado para 12h conforme a regra original
 
-function buscarAlocacao(alocacao, veiculo) {
-  for (const a of alocacao) if (a.ordem === veiculo) return a;
-  return null;
+// Adaptado para ler do Map do novo parsers.js
+function buscarAlocacao(alocacaoMap, veiculo) {
+  if (!alocacaoMap || typeof alocacaoMap.get !== 'function') return null;
+  return alocacaoMap.get(veiculo) || null;
 }
 
 function estaRetido(retidos, veiculo) {
@@ -41,7 +42,6 @@ function processarGPS(veic, ctx) {
   }
 
   // 2. Alocação (verificar se existe)
-  //    Obs.: se GPS não deve exigir alocação, remover este bloco.
   const aloc = buscarAlocacao(ctx.alocacao, veic.veiculo);
   if (!aloc) {
     return { ...base, horas, aprovado: false, etapa: 'alocacao', motivo: 'Não alocado' };
@@ -94,7 +94,7 @@ function processarDVR(veic, ctx) {
   }
 
   // 3. Filial (do LOCALIZADO)
-  const filial = normalizarFilialDVR(aloc.localizado);
+  const filial = normalizarFilialDVR(aloc.localizado_original); // Note que aqui mudou para _original
   if (!filial) {
     return { ...base, horas, aprovado: false, etapa: 'filial', motivo: 'Filial não localizada' };
   }
