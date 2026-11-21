@@ -497,6 +497,8 @@ textarea:focus {
   letter-spacing: 0.03em;
 }
 
+.mb-2 { margin-bottom: 16px; }
+
 /* Resumo */
 .resumo-lista {
   list-style: none;
