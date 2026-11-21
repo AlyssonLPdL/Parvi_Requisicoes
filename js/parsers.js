@@ -1,10 +1,12 @@
 'use strict';
 
+// NOVA FUNÇÃO NORMHEADER: Remove tudo que não for letra ou número.
+// Assim "Nº ORDEM", "N° ORDEM" e "Nº  ORDEM" viram todos "NORDEM".
 function normHeader(h) {
   return String(h || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()
-    .replace(/[º°]/g, '')
+    .replace(/[^A-Z0-9]/g, '')
     .trim();
 }
 
@@ -17,23 +19,33 @@ function parseAlocacao(texto) {
   const linhas = String(texto || "").split(/\r?\n/).filter(l => l.trim() !== "");
   if (linhas.length < 2) throw new Error("Alocação vazia ou sem cabeçalho.");
 
-  const header = linhas[0].split("\t").map(h => h.trim().toUpperCase());
+  const headerRaw = linhas[0].split("\t");
+  const headerNorm = headerRaw.map(normHeader);
+  
   let idxOrdem = -1, idxLocalizado = -1, idxPlaca = -1;
 
-  for (let i = 0; i < header.length; i++) {
-    const h = header[i];
-    if (h === "Nº ORDEM" || h === "N° ORDEM" || h === "NO ORDEM" || h === "Nº  ORDEM") idxOrdem = i;
+  for (let i = 0; i < headerNorm.length; i++) {
+    const h = headerNorm[i];
+    // Agora procuramos pelo texto limpo (sem º, sem espaços)
+    if (h === "NORDEM") idxOrdem = i;
     if (h === "LOCALIZADO") idxLocalizado = i;
     if (h === "PLACA") idxPlaca = i;
   }
 
   if (idxOrdem === -1 || idxLocalizado === -1) {
-    throw new Error("Colunas 'Nº ORDEM' e/ou 'LOCALIZADO' não encontradas.");
+    throw new Error("Colunas 'Nº ORDEM' e/ou 'LOCALIZADO' não encontradas no cabeçalho.");
   }
 
   const mapa = new Map();
   for (let i = 1; i < linhas.length; i++) {
-    const cols = linhas[i].split("\t");
+    let cols = linhas[i].split("\t");
+    
+    // A MÁGICA AQUI: Se a linha de dados começar com TAB (vazio) mas o cabeçalho não,
+    // nós removemos o primeiro item para alinhar as colunas.
+    if (cols[0] === "" && headerRaw[0] !== "") {
+      cols.shift(); // Remove o primeiro item vazio
+    }
+
     if (cols.length <= idxOrdem) continue;
     
     const ordem = normalizarVeiculo(cols[idxOrdem]);
@@ -44,7 +56,7 @@ function parseAlocacao(texto) {
     
     mapa.set(ordem, {
       localizado_original: localizado,
-      filial: normalizarFilialDVR(localizado), // <-- CORRIGIDO AQUI
+      filial: normalizarFilialDVR(localizado),
       placa: placa,
       linha_original: linhas[i]
     });
