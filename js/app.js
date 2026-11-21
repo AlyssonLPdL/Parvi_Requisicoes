@@ -12,8 +12,18 @@ function ativarAba(nome) {
     p.hidden = (p.id !== 'painel-' + nome);
   });
 
-  // Se for insumos, atualiza a tela com os dados salvos
+  // Atualiza as telas específicas
   if (nome === 'insumos') renderInsumos();
+  if (nome === 'consultas') {
+    // Limpa a busca e foca no input quando entrar na aba
+    const input = document.getElementById('input-busca');
+    if(input) {
+        input.value = '';
+        setTimeout(() => input.focus(), 100);
+    }
+    const res = document.getElementById('resultado-busca');
+    if(res) res.innerHTML = '';
+  }
 }
 
 // Adiciona o evento de clique em todos os botões com a classe .tab
@@ -24,21 +34,32 @@ document.querySelectorAll('.tab').forEach(btn => {
 /* ===================== INSUMOS ===================== */
 function renderInsumos() {
   const ins = carregarInsumos();
+  
+  // Preenche os campos com o que está salvo
   document.getElementById('txt-alocacao').value = ins.alocacao.texto;
   document.getElementById('txt-retidos').value  = ins.retidos.texto;
+  
+  // Preenche o novo campo de motoristas
+  const elMot = document.getElementById('txt-motoristas');
+  if (elMot) elMot.value = ins.motoristas.texto;
 
   const alarme = document.getElementById('alarme-insumos');
   const partes = [];
+  
+  // Verifica o vencimento dos três
   const a1 = textoAlarmeInsumo('Alocação', ins.alocacao);
   const a2 = textoAlarmeInsumo('Retidos',  ins.retidos);
+  const a3 = textoAlarmeInsumo('Motoristas', ins.motoristas);
+
   if (a1) partes.push(a1);
   if (a2) partes.push(a2);
+  if (a3) partes.push(a3);
 
   if (partes.length) {
     alarme.hidden = false;
     alarme.textContent = partes.join(' • ');
     alarme.classList.toggle('vencido',
-      ins.alocacao.vencido || ins.retidos.vencido);
+      ins.alocacao.vencido || ins.retidos.vencido || ins.motoristas.vencido);
   } else {
     alarme.hidden = true;
   }
@@ -49,7 +70,10 @@ if (btnSalvarInsumos) {
   btnSalvarInsumos.addEventListener('click', () => {
     const aloc = document.getElementById('txt-alocacao').value;
     const ret  = document.getElementById('txt-retidos').value;
-    salvarInsumos(aloc, ret);
+    const mot  = document.getElementById('txt-motoristas') ? document.getElementById('txt-motoristas').value : '';
+    
+    salvarInsumos(aloc, ret, mot); // Agora salva os 3
+    
     const st = document.getElementById('status-insumos');
     st.textContent = 'Salvos em ' + new Date().toLocaleString('pt-BR');
     setTimeout(() => { st.textContent = ''; }, 4000);
@@ -57,7 +81,7 @@ if (btnSalvarInsumos) {
   });
 }
 
-/* ===================== PROCESSAMENTO ===================== */
+/* ===================== PROCESSAMENTO (GPS/DVR) ===================== */
 function limparResultado(tipo) {
   const box = document.getElementById('result-' + tipo);
   if (!box) return null;
@@ -100,7 +124,7 @@ function processar(tipo) {
   if (!box) return;
   
   renderResumo(box, resultados);
-  renderCopys(box, resultados, tipo); // <-- Aqui está o tipo sendo passado corretamente
+  renderCopys(box, resultados, tipo); // Passando o tipo correto
   renderTabela(box, resultados, tipo);
   renderDownloads(box, resultados, tipo);
 }
