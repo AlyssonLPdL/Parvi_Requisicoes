@@ -152,14 +152,9 @@ function iniciarTesseract(imgBase64, statusEl, resultEl, outputEl) {
 }
 
 function formatarParaTSV(textoBruto) {
-  // Limpa o texto e separa por blocos
+  // Limpa o texto e separa por linhas
   const linhas = textoBruto.split('\n').map(l => l.trim()).filter(l => l);
   const chamados = [];
-
-  // Regex super permissivo
-  const regexOS = /#?(\d{5,6})/;
-  const regexData = /(\d{2}\/\d{2}\/\d{4})/;
-  const regexAssunto = /(DVR\s*INOPERANTE|GPS\s*SEM\s*COMUNICA[CÇ][AÃ]O)\s*[-–—]?\s*(\d+)\s*[-–—]?\s*([A-Z]{2,3})/i;
 
   let osAtual = null;
   let dataAtual = null;
@@ -167,27 +162,47 @@ function formatarParaTSV(textoBruto) {
   for (let i = 0; i < linhas.length; i++) {
     const linha = linhas[i];
     
-    // Tenta achar tudo na mesma linha primeiro
-    const mOS = linha.match(regexOS);
-    const mData = linha.match(regexData);
-    const mAss = linha.match(regexAssunto);
+    // 1. Procura a Data (20/11/2026)
+    const matchData = linha.match(/(\d{2}\/\d{2}\/\d{4})/);
+    if (matchData) dataAtual = matchData[1];
 
-    if (mOS && mData && mAss) {
-      registrarChamado(mOS[1], mData[1], mAss[1], mAss[2], mAss[3], chamados);
-    } else {
-      // Se não achou tudo junto, tenta achar separadamente e junta com a próxima linha
-      if (mOS) osAtual = mOS[1];
-      if (mData) dataAtual = mData[1];
-      if (mAss) {
-        // Se achou o assunto mas não a OS/Data nessa linha, usa as variáveis da linha anterior
-        let os = mOS ? mOS[1] : osAtual;
-        let data = mData ? mData[1] : dataAtual;
-        if (os && data) {
-            registrarChamado(os, data, mAss[1], mAss[2], mAss[3], chamados);
-            osAtual = null; // limpa
-            dataAtual = null;
-        }
+    // 2. Procura a O.S. (o Tesseract pode ler o # como 4 ou não ler, então buscamos um número de 5 a 6 dígitos)
+    // Geralmente a O.S. fica no começo da linha
+    const matchOS = linha.match(/(?:#|4)?(\d{5,6})/);
+    if (matchOS && matchOS[1].startsWith('10')) { // As O.S. do seu sistema começam com 10 (ex: 104559)
+        osAtual = matchOS[1];
+    }
+
+    // 3. Procura o Assunto e o Veículo: "TEXTO - 33036 - PEB"
+    // A regex busca a palavra, um hífen, o número e outro hífen e a sigla.
+    const matchAssunto = linha.match(/(DVR\s*INOPERANTE|GPS\s*SEM\s*COMUNICA[CÇ][AÃ]O)\s*[-–—]\s*(\d{5,6})\s*[-–—]\s*([A-Z]{2,3})/i);
+
+    if (matchAssunto) {
+      const tipoBruto = matchAssunto[1].toUpperCase();
+      const veiculo = matchAssunto[2];
+      const filial = matchAssunto[3];
+
+      let tipoServico = 'DVR INOPERANTE';
+      let codigo = '7';
+      let camera = 'CAMERA';
+
+      if (tipoBruto.includes('GPS')) {
+        tipoServico = 'GPS SEM COMUNICAÇÃO';
+        codigo = '8';
+        camera = 'TELEMETRIA';
       }
+
+      // Se por acaso a O.S. ou a Data não estavam na mesma linha, tenta pegar da linha anterior
+      const osFinal = osAtual || "000000"; 
+      const dataFinal = dataAtual || "00/00/0000";
+
+      chamados.push({
+        data: dataFinal, veiculo, os: osFinal, filial, camera, codigo, tipoServico
+      });
+      
+      // Limpa os temporários para não repetir na próxima linha
+      osAtual = null;
+      dataAtual = null;
     }
   }
 
@@ -204,28 +219,12 @@ function formatarParaTSV(textoBruto) {
   // Ordena pelo número da O.S.
   uniqueChamados.sort((a, b) => parseInt(a.os) - parseInt(b.os));
 
+  // Gera o TSV
   const linhasTSV = uniqueChamados.map(c => 
     `${c.data}\t${c.veiculo}\t${c.os}\t${c.filial}\t${c.camera}\t${c.codigo}\t${c.tipoServico}`
   );
 
   return linhasTSV.join('\n');
-}
-
-function registrarChamado(os, data, tipoBruto, veiculo, filial, array) {
-    let tipoServico = 'DVR INOPERANTE';
-    let codigo = '7';
-    let camera = 'CAMERA';
-
-    const tipoUpper = tipoBruto.toUpperCase();
-    if (tipoUpper.includes('GPS')) {
-      tipoServico = 'GPS SEM COMUNICAÇÃO';
-      codigo = '8';
-      camera = 'TELEMETRIA';
-    }
-
-    array.push({
-      data, veiculo, os, filial, camera, codigo, tipoServico
-    });
 }
 
 function copiarOCR() {
