@@ -12,33 +12,63 @@ function splitLinhas(texto) {
   return String(texto || '').split(/\r?\n/);
 }
 
-/* ---------- ALOCAÇÃO ---------- */
+/* ---------------- ALOCAÇÃO ---------------- */
 function parseAlocacao(texto) {
-  const linhas = splitLinhas(texto).filter(l => l.trim());
-  if (!linhas.length) return [];
+  const linhas = String(texto || "").split(/\r?\n/).filter(l => l.trim() !== "");
+  if (linhas.length < 2) throw new Error("Alocação vazia ou sem cabeçalho.");
 
-  const header = linhas[0].split('\t').map(normHeader);
-  const idxOrdem      = header.findIndex(h => h.includes('ORDEM'));
-  const idxPlaca      = header.findIndex(h => h === 'PLACA');
-  const idxCliente    = header.findIndex(h => h.includes('CLIENTE'));
-  const idxLocalizado = header.findIndex(h => h === 'LOCALIZADO');
+  const header = linhas[0].split("\t").map(h => h.trim().toUpperCase());
+  let idxOrdem = -1, idxLocalizado = -1, idxPlaca = -1;
 
-  if (idxOrdem < 0) return [];
+  for (let i = 0; i < header.length; i++) {
+    const h = header[i];
+    if (h === "Nº ORDEM" || h === "N° ORDEM" || h === "NO ORDEM" || h === "Nº  ORDEM") idxOrdem = i;
+    if (h === "LOCALIZADO") idxLocalizado = i;
+    if (h === "PLACA") idxPlaca = i;
+  }
 
-  const out = [];
+  if (idxOrdem === -1 || idxLocalizado === -1) {
+    throw new Error("Colunas 'Nº ORDEM' e/ou 'LOCALIZADO' não encontradas.");
+  }
+
+  const mapa = new Map();
   for (let i = 1; i < linhas.length; i++) {
-    const cols = linhas[i].split('\t');
+    const cols = linhas[i].split("\t");
+    if (cols.length <= idxOrdem) continue;
+    
     const ordem = normalizarVeiculo(cols[idxOrdem]);
     if (!ordem) continue;
-    if (ordem.length > 12) continue;          // descarta faixas / lixo
-    out.push({
-      ordem,
-      placa:      idxPlaca      >= 0 ? (cols[idxPlaca] || '').trim()      : '',
-      cliente:    idxCliente    >= 0 ? (cols[idxCliente] || '').trim()    : '',
-      localizado: idxLocalizado >= 0 ? (cols[idxLocalizado] || '').trim() : ''
+    
+    const localizado = cols[idxLocalizado] ? cols[idxLocalizado].trim() : "";
+    const placa = (idxPlaca !== -1 && cols[idxPlaca]) ? cols[idxPlaca].trim().toUpperCase() : "";
+    
+    mapa.set(ordem, {
+      localizado_original: localizado,
+      filial: normalizarSiglaLocalizado(localizado),
+      placa: placa,
+      linha_original: linhas[i]
     });
   }
-  return out;
+  return mapa;
+}
+
+/* ---------------- MOTORISTAS ---------------- */
+function parseMotoristas(texto) {
+  const linhas = String(texto || "").split(/\r?\n/).filter(l => l.trim() !== "");
+  if (linhas.length < 2) return [];
+  
+  const motoristas = [];
+  for (let i = 1; i < linhas.length; i++) {
+    const cols = linhas[i].split("\t");
+    if (cols.length >= 3) {
+      motoristas.push({
+        filial: cols[0].trim(),
+        matricula: cols[1].trim(),
+        nome: cols[2].trim()
+      });
+    }
+  }
+  return motoristas;
 }
 
 /* ---------- RETIDOS ---------- */
