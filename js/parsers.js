@@ -53,19 +53,35 @@ function parseAlocacao(texto) {
 }
 
 /* ---------------- MOTORISTAS ---------------- */
+/* ---------------- MOTORISTAS ---------------- */
 function parseMotoristas(texto) {
   const linhas = String(texto || "").split(/\r?\n/).filter(l => l.trim() !== "");
   if (linhas.length < 2) return [];
   
   const motoristas = [];
   for (let i = 1; i < linhas.length; i++) {
-    const cols = linhas[i].split("\t");
+    // Tenta separar por TAB. Se não der, tenta separar por 2 ou mais espaços.
+    let cols = linhas[i].split("\t");
+    if (cols.length < 3) {
+       cols = linhas[i].split(/\s{2,}/); 
+    }
+    
     if (cols.length >= 3) {
       motoristas.push({
         filial: cols[0].trim(),
         matricula: cols[1].trim(),
-        nome: cols[2].trim()
+        nome: cols.slice(2).join(" ").trim() // Pega tudo depois da matrícula e junta como nome
       });
+    } else {
+       // Plano C: Regex bruto caso a formatação esteja muito louca
+       const match = linhas[i].match(/^(.*?)\s+(\d+)\s+(.*)$/);
+       if (match) {
+           motoristas.push({
+               filial: match[1].trim(),
+               matricula: match[2].trim(),
+               nome: match[3].trim()
+           });
+       }
     }
   }
   return motoristas;
