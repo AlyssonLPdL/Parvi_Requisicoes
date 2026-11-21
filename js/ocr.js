@@ -162,7 +162,7 @@ function formatarParaTSV(textoBruto) {
     const matchData = linha.match(/(\d{2}\/\d{2}\/\d{4})/);
     if (matchData) dataAtual = matchData[1];
 
-    // 1. Pega o Assunto (DVR / GPS), o Veículo e a Filial
+    // Pega o Assunto, Veículo e Filial
     const matchAssunto = linha.match(/(DVR\s*INOPERANTE|GPS\s*SEM\s*COMUNICA[CÇ][AÃ]O)\s*[-–—]\s*(\d{5,6})\s*[-–—]\s*([A-Z]{2,3})/i);
 
     if (matchAssunto) {
@@ -180,17 +180,13 @@ function formatarParaTSV(textoBruto) {
         camera = 'TELEMETRIA';
       }
 
-      // 2. Caça a O.S. 
-      // Tenta achar qualquer número de 6 dígitos que comece com 10 na linha inteira
-      let osFinal = "000000";
-      
-      // Procura o padrão 10XXXX (6 dígitos) em qualquer lugar da linha, mesmo colado em letras
+      // Caça a O.S.
+      let osFinal = null;
       const matchOSForcado = linha.match(/10\d{4}/);
       
       if (matchOSForcado) {
         osFinal = matchOSForcado[0];
       } else {
-        // Fallback: tenta os métodos anteriores (número solto de 5 ou 6 dígitos diferente do veículo)
         const todosNumeros = linha.match(/\d+/g) || [];
         for (const num of todosNumeros) {
           if (num !== veiculo && num.length >= 5 && num.length <= 6) {
@@ -204,10 +200,35 @@ function formatarParaTSV(textoBruto) {
       }
 
       chamados.push({
-        data: dataAtual, veiculo, os: osFinal, filial, camera, codigo, tipoServico
+        data: dataAtual, veiculo, os: osFinal || "000000", filial, camera, codigo, tipoServico
       });
     }
   }
+
+  // ==========================================
+  // CORREÇÃO SEQUENCIAL DE O.S. (A MÁGICA)
+  // ==========================================
+  // 1. Ordena a lista pelo número da O.S. (os que falharam ficam no topo como "000000")
+  chamados.sort((a, b) => parseInt(a.os) - parseInt(b.os));
+
+  // 2. Varre a lista procurando por O.S. zeradas ou buracos na sequência
+  for (let i = 1; i < chamados.length; i++) {
+    const osAnterior = parseInt(chamados[i - 1].os);
+    const osAtual = parseInt(chamados[i].os);
+
+    // Se a linha atual está zerada, assumimos que é o número anterior + 1
+    if (osAtual === 0 && osAnterior > 0) {
+      chamados[i].os = (osAnterior + 1).toString();
+    } 
+    // Se houver um buraco (ex: anterior 104553 e atual 104555), e estiver faltando APENAS 1
+    else if (osAtual - osAnterior === 2 && osAnterior > 0) {
+      // Se o próximo item for maior que o atual + 1, então o buraco está no meio
+      // (mas como o OCR errou a leitura da linha inteira, o buraco já foi tratado no if de cima)
+    }
+  }
+
+  // Reordena por segurança para garantir (já que o 0 virou 104554)
+  chamados.sort((a, b) => parseInt(a.os) - parseInt(b.os));
 
   const uniqueChamados = [];
   const vistos = new Set();
@@ -217,8 +238,6 @@ function formatarParaTSV(textoBruto) {
           uniqueChamados.push(c);
       }
   }
-
-  uniqueChamados.sort((a, b) => parseInt(a.os) - parseInt(b.os));
 
   return uniqueChamados.map(c => 
     `${c.data}\t${c.veiculo}\t${c.os}\t${c.filial}\t${c.camera}\t${c.codigo}\t${c.tipoServico}`
