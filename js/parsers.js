@@ -1,7 +1,5 @@
 'use strict';
 
-// NOVA FUNÇÃO NORMHEADER: Remove tudo que não for letra ou número.
-// Assim "Nº ORDEM", "N° ORDEM" e "Nº  ORDEM" viram todos "NORDEM".
 function normHeader(h) {
   return String(h || '')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -26,24 +24,23 @@ function parseAlocacao(texto) {
 
   for (let i = 0; i < headerNorm.length; i++) {
     const h = headerNorm[i];
-    // Agora procuramos pelo texto limpo (sem º, sem espaços)
     if (h === "NORDEM") idxOrdem = i;
     if (h === "LOCALIZADO") idxLocalizado = i;
     if (h === "PLACA") idxPlaca = i;
   }
 
   if (idxOrdem === -1 || idxLocalizado === -1) {
-    throw new Error("Colunas 'Nº ORDEM' e/ou 'LOCALIZADO' não encontradas no cabeçalho.");
+    throw new Error("Colunas 'Nº ORDEM' e/ou 'LOCALIZADO' não encontradas.");
   }
 
   const mapa = new Map();
   for (let i = 1; i < linhas.length; i++) {
     let cols = linhas[i].split("\t");
     
-    // A MÁGICA AQUI: Se a linha de dados começar com TAB (vazio) mas o cabeçalho não,
-    // nós removemos o primeiro item para alinhar as colunas.
-    if (cols[0] === "" && headerRaw[0] !== "") {
-      cols.shift(); // Remove o primeiro item vazio
+    // O CORRETIVO ESTÁ AQUI: Se a linha de dados tiver mais colunas que o cabeçalho,
+    // significa que veio com aquele espaço/TAB invisível da coluna QTD. Nós ignoramos ele.
+    if (cols.length > headerRaw.length) {
+      cols.shift(); 
     }
 
     if (cols.length <= idxOrdem) continue;
@@ -71,14 +68,11 @@ function parseMotoristas(texto) {
   
   const motoristas = [];
   for (let i = 1; i < linhas.length; i++) {
-    // O segredo está aqui: split(/\s+/) quebra a linha ignorando se tem 1, 2 ou 10 espaços/TABs
-    const tokens = linhas[i].trim().split(/\s+/);
-    
+    const tokens = linhas[i].trim().split(/\s+/); // Busca por qualquer espaço
     if (tokens.length >= 3) {
       motoristas.push({
         filial: tokens[0],
         matricula: tokens[1],
-        // Pega tudo a partir do 3º token e junta com espaço (o nome completo)
         nome: tokens.slice(2).join(" ")
       });
     }
@@ -97,7 +91,6 @@ function parseRetidos(texto) {
     if (!t) continue;
     if (primeiraNaoVazia) {
       primeiraNaoVazia = false;
-      // pula cabeçalho (linha sem nenhum dígito)
       if (!/\d/.test(t)) continue;
     }
     const n = normalizarVeiculo(t);
@@ -142,8 +135,6 @@ function parseDVR(texto) {
   for (let i = 0; i < linhas.length; i++) {
     const veicStr = linhas[i].trim();
     if (!veicStr) continue;
-
-    // próxima linha não vazia = tempo
     let j = i + 1;
     while (j < linhas.length && !linhas[j].trim()) j++;
     if (j >= linhas.length) break;
