@@ -793,3 +793,31 @@ table.tabela tr.linha-removida td.motivo {
 @media (min-width: 1000px) {
   .painel-insumos .input-grid { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ============================================
+   CONSULTAS E BUSCA
+   ============================================ */
+.input-busca {
+  width: 100%;
+  padding: 16px 20px;
+  font-size: 18px;
+  border: 2px solid var(--primary);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  transition: all var(--transition);
+  box-shadow: 0 2px 10px rgba(79, 70, 229, 0.1);
+}
+
+.input-busca:focus {
+  outline: none;
+  box-shadow: 0 4px 20px rgba(79, 70, 229, 0.25);
+  border-color: var(--primary-hover);
+}
+
+/* Ajustar grid de insumos para 3 colunas em telas grandes */
+@media (min-width: 1000px) {
+  #painel-insumos .input-grid { 
+    grid-template-columns: repeat(3, 1fr); 
+  }
+}
