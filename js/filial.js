@@ -3,25 +3,47 @@
 const SIGLAS_VALIDAS = ['AM', 'BA', 'BAR', 'MA', 'PE', 'PEB'];
 const ORDEM_FILIAIS  = ['AM', 'BA', 'BAR', 'MA', 'PE', 'PEB'];
 
-/** Extrai a UF do endereço (último campo antes de "Brazil"). */
+/** Extrai a UF do endereço de forma inteligente (ignorando o CEP). */
 function extrairUF(endereco) {
   if (!endereco) return null;
   const idx = endereco.search(/Brazil/i);
   if (idx < 0) return null;
+  
   const antes = endereco.slice(0, idx);
   const partes = antes.split(',').map(p => p.trim()).filter(Boolean);
   if (!partes.length) return null;
-  return partes[partes.length - 1].toUpperCase();
+  
+  // Pega a última parte (ex: "PE 51350-670")
+  const ultima = partes[partes.length - 1];
+  
+  // Pega apenas as 2 primeiras letras (a UF) e ignora o resto (CEP)
+  const match = ultima.match(/^([A-Z]{2})\b/i);
+  if (match) return match[1].toUpperCase();
+  
+  // Se vier só a UF sem número (ex: "PE")
+  if (ultima.length === 2) return ultima.toUpperCase();
+  
+  return null;
 }
 
 /** Resolve filial PA a partir do município no endereço. */
 function resolverMunicipioPA(endereco) {
-  const up = String(endereco || '').toUpperCase().replace(/[.\-\s]/g, '');
-  if (up.includes('BARCARENA')) return 'BAR';
-  if (up.includes('PARAUAPEBAS') ||
-      up.includes('PAUAPEBA')    ||
-      up.includes('CARAJAS'))    return 'PEB';
-  return null;
+  // Remove acentos e pontuações para facilitar a busca
+  const up = String(endereco || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  
+  // Cidades que são da filial PEB (Parauapebas / Carajás)
+  if (up.includes('PARAUAPEBAS') || up.includes('CARAJAS') || up.includes('PAUAPEBA')) {
+    return 'PEB';
+  }
+  
+  // Cidades que são da filial BAR (Barcarena, Ananindeua, Abaetetuba, etc.)
+  if (up.includes('BARCARENA') || up.includes('ANANINDEUA') || up.includes('ABAETETUBA')) {
+    return 'BAR';
+  }
+  
+  // Para qualquer outra cidade do PA que não seja PEB, assumimos BAR por segurança
+  // (já que as únicas filiais do Pará são BAR e PEB)
+  return 'BAR';
 }
 
 /**
@@ -33,8 +55,15 @@ function resolverMunicipioPA(endereco) {
 function filialDoEndereco(endereco) {
   const uf = extrairUF(endereco);
   if (!uf) return null;
-  if (uf === 'PA') return resolverMunicipioPA(endereco);
-  if (SIGLAS_VALIDAS.includes(uf)) return uf;
+  
+  if (uf === 'PA') {
+    return resolverMunicipioPA(endereco);
+  }
+  
+  if (SIGLAS_VALIDAS.includes(uf)) {
+    return uf;
+  }
+  
   return null;
 }
 
