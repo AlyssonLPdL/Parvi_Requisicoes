@@ -152,29 +152,21 @@ function iniciarTesseract(imgBase64, statusEl, resultEl, outputEl) {
 }
 
 function formatarParaTSV(textoBruto) {
-  // Limpa o texto e separa por linhas
+  // Limpa o texto
   const linhas = textoBruto.split('\n').map(l => l.trim()).filter(l => l);
   const chamados = [];
-
-  let osAtual = null;
-  let dataAtual = null;
+  
+  let dataAtual = "20/11/2026"; // Fallback
 
   for (let i = 0; i < linhas.length; i++) {
     const linha = linhas[i];
     
-    // 1. Procura a Data (20/11/2026)
+    // 1. Pega a Data
     const matchData = linha.match(/(\d{2}\/\d{2}\/\d{4})/);
     if (matchData) dataAtual = matchData[1];
 
-    // 2. Procura a O.S. (o Tesseract pode ler o # como 4 ou não ler, então buscamos um número de 5 a 6 dígitos)
-    // Geralmente a O.S. fica no começo da linha
-    const matchOS = linha.match(/(?:#|4)?(\d{5,6})/);
-    if (matchOS && matchOS[1].startsWith('10')) { // As O.S. do seu sistema começam com 10 (ex: 104559)
-        osAtual = matchOS[1];
-    }
-
-    // 3. Procura o Assunto e o Veículo: "TEXTO - 33036 - PEB"
-    // A regex busca a palavra, um hífen, o número e outro hífen e a sigla.
+    // 2. Pega o Assunto, Veículo e Filial (A âncora de tudo)
+    // Ex: "DVR INOPERANTE - 33036 - PEB" ou "GPS SEM COMUNICAÇÃO - 55044 - MA"
     const matchAssunto = linha.match(/(DVR\s*INOPERANTE|GPS\s*SEM\s*COMUNICA[CÇ][AÃ]O)\s*[-–—]\s*(\d{5,6})\s*[-–—]\s*([A-Z]{2,3})/i);
 
     if (matchAssunto) {
@@ -192,21 +184,46 @@ function formatarParaTSV(textoBruto) {
         camera = 'TELEMETRIA';
       }
 
-      // Se por acaso a O.S. ou a Data não estavam na mesma linha, tenta pegar da linha anterior
-      const osFinal = osAtual || "000000"; 
-      const dataFinal = dataAtual || "00/00/0000";
+      // 3. Agora vamos caçar a O.S. na linha inteira.
+      // A O.S. é o número que NÃO é o veículo e geralmente tem 5 ou 6 dígitos.
+      // O Tesseract pode ler o "#" como "4" ou "S", então extraímos TODOS os números da linha
+      const todosNumeros = linha.match(/\d+/g) || [];
+      
+      let osFinal = "000000";
+      for (const num of todosNumeros) {
+        // Se o número for diferente do veículo, tiver 5 ou 6 dígitos e começar com 10 (padrão das suas O.S.)
+        // Ou se for o único número grande na linha
+        if (num !== veiculo && num.length >= 5 && num.length <= 6) {
+            // Limpa possíveis lixos do começo (se o OCR leu o # como 4)
+            if (num.startsWith('4104')) {
+                osFinal = '10' + num.substring(4); // Corrige "4104559" para "104559"
+            } else if (num.startsWith('410')) {
+                osFinal = '10' + num.substring(3); // Corrige "410455" para "10455"
+            } else {
+                osFinal = num; // Se veio certo (ex: 104552)
+            }
+            break; // Achou a O.S., para de procurar
+        }
+      }
+
+      // Tratamento especial: se o Tesseract cortou o '1' do começo (ex: 04555 em vez de 104555)
+      if (osFinal.length === 5 && osFinal.startsWith('0')) {
+          osFinal = '1' + osFinal; // Vira 104555
+      }
 
       chamados.push({
-        data: dataFinal, veiculo, os: osFinal, filial, camera, codigo, tipoServico
+        data: dataAtual, 
+        veiculo: veiculo, 
+        os: osFinal, 
+        filial: filial, 
+        camera: camera, 
+        codigo: codigo, 
+        tipoServico: tipoServico
       });
-      
-      // Limpa os temporários para não repetir na próxima linha
-      osAtual = null;
-      dataAtual = null;
     }
   }
 
-  // Remove duplicatas
+  // Remove duplicatas e Ordena
   const uniqueChamados = [];
   const vistos = new Set();
   for(const c of chamados) {
@@ -216,15 +233,11 @@ function formatarParaTSV(textoBruto) {
       }
   }
 
-  // Ordena pelo número da O.S.
   uniqueChamados.sort((a, b) => parseInt(a.os) - parseInt(b.os));
 
-  // Gera o TSV
-  const linhasTSV = uniqueChamados.map(c => 
+  return uniqueChamados.map(c => 
     `${c.data}\t${c.veiculo}\t${c.os}\t${c.filial}\t${c.camera}\t${c.codigo}\t${c.tipoServico}`
-  );
-
-  return linhasTSV.join('\n');
+  ).join('\n');
 }
 
 function copiarOCR() {
