@@ -30,6 +30,15 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('paste', (e) => {
     const painelOcr = document.getElementById('painel-ocr');
     if (painelOcr && !painelOcr.hidden) {
+      // Se colar texto puro (copiado da tela)
+      if (e.clipboardData.getData('text')) {
+        const texto = e.clipboardData.getData('text');
+        if (texto.trim().length > 10) {
+            processarTextoPuro(texto);
+            return;
+        }
+      }
+      // Se colar imagem
       const items = e.clipboardData.items;
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
@@ -40,6 +49,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+function processarTextoPuro(texto) {
+  const statusEl = document.getElementById('ocr-status');
+  const resultEl = document.getElementById('ocr-resultado');
+  const outputEl = document.getElementById('ocr-output');
+
+  statusEl.classList.remove('hidden');
+  statusEl.className = 'status ocr-loading';
+  statusEl.textContent = 'Formatando texto...';
+
+  const tsv = formatarParaTSV(texto);
+  if (tsv) {
+    outputEl.value = tsv;
+    resultEl.classList.remove('hidden');
+    statusEl.classList.add('hidden');
+  } else {
+    statusEl.textContent = 'Texto colado não contém chamados válidos no formato esperado.';
+    statusEl.style.color = 'var(--danger)';
+  }
+}
 
 function processarImagemOCR(file) {
   if (ocrProcessando) return;
@@ -52,9 +81,8 @@ function processarImagemOCR(file) {
   resultEl.classList.add('hidden');
   statusEl.classList.remove('hidden');
   statusEl.className = 'status ocr-loading';
-  statusEl.textContent = 'Preparando imagem...';
+  statusEl.textContent = 'Preparando imagem (Alto Contraste)...';
 
-  // 1. Lê a imagem e inverte as cores (para corrigir o Dark Mode)
   const img = new Image();
   img.onload = () => {
     const canvas = document.createElement('canvas');
@@ -62,24 +90,26 @@ function processarImagemOCR(file) {
     canvas.width = img.width;
     canvas.height = img.height;
     
-    // Desenha a imagem original
     ctx.drawImage(img, 0, 0);
     
-    // Pega os dados dos pixels
+    // Filtro agressivo: Transforma em Preto e Branco puro (Binarização)
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
     
-    // Inverte as cores (R, G, B) para ficar preto no branco
     for (let i = 0; i < data.length; i += 4) {
-      data[i] = 255 - data[i];         // R
-      data[i + 1] = 255 - data[i + 1]; // G
-      data[i + 2] = 255 - data[i + 2]; // B
+      // Calcula a luminosidade do pixel
+      const luminosidade = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+      
+      // Se for escuro, vira preto (0). Se for claro, vira branco (255).
+      // Isso ignora tons de cinza e melhora o OCR em interfaces dark.
+      const cor = luminosidade > 128 ? 255 : 0; 
+      
+      data[i] = cor;         // R
+      data[i + 1] = cor;     // G
+      data[i + 2] = cor;     // B
     }
     
-    // Aplica a imagem invertida de volta no canvas
     ctx.putImageData(imageData, 0, 0);
-    
-    // Converte para Base64 e manda pro Tesseract
     const base64Image = canvas.toDataURL('image/png');
     
     iniciarTesseract(base64Image, statusEl, resultEl, outputEl);
@@ -88,7 +118,7 @@ function processarImagemOCR(file) {
 }
 
 function iniciarTesseract(imgBase64, statusEl, resultEl, outputEl) {
-  statusEl.textContent = 'Lendo texto da imagem...';
+  statusEl.textContent = 'Lendo imagem...';
 
   Tesseract.recognize(
     imgBase64,
@@ -96,13 +126,12 @@ function iniciarTesseract(imgBase64, statusEl, resultEl, outputEl) {
     {
       logger: m => {
         if (m.status === 'recognizing text') {
-          const pct = Math.round(m.progress * 100);
-          statusEl.textContent = `Lendo imagem... ${pct}%`;
+          statusEl.textContent = `Lendo imagem... ${Math.round(m.progress * 100)}%`;
         }
       }
     }
   ).then(({ data: { text } }) => {
-    statusEl.textContent = 'Formatando...';
+    statusEl.textContent = 'Formatando dados...';
     const tsv = formatarParaTSV(text);
     
     if (tsv) {
@@ -110,7 +139,7 @@ function iniciarTesseract(imgBase64, statusEl, resultEl, outputEl) {
       resultEl.classList.remove('hidden');
       statusEl.classList.add('hidden');
     } else {
-      statusEl.textContent = 'Não foi possível encontrar chamados válidos. Verifique se a imagem contém textos como "DVR INOPERANTE" e "#104554".';
+      statusEl.innerHTML = 'Não foi possível ler a imagem. <br><br><b>Dica:</b> Use a Ferramenta de Captura do Windows (Win + Shift + S), recorte a área e tente novamente. Ou selecione o texto na tela e dê Ctrl+C para colar como texto.';
       statusEl.style.color = 'var(--danger)';
     }
   }).catch(err => {
@@ -123,74 +152,46 @@ function iniciarTesseract(imgBase64, statusEl, resultEl, outputEl) {
 }
 
 function formatarParaTSV(textoBruto) {
-  const linhas = textoBruto.split('\n');
+  // Limpa o texto e separa por blocos
+  const linhas = textoBruto.split('\n').map(l => l.trim()).filter(l => l);
   const chamados = [];
+
+  // Regex super permissivo
+  const regexOS = /#?(\d{5,6})/;
+  const regexData = /(\d{2}\/\d{2}\/\d{4})/;
+  const regexAssunto = /(DVR\s*INOPERANTE|GPS\s*SEM\s*COMUNICA[CÇ][AÃ]O)\s*[-–—]?\s*(\d+)\s*[-–—]?\s*([A-Z]{2,3})/i;
+
+  let osAtual = null;
+  let dataAtual = null;
 
   for (let i = 0; i < linhas.length; i++) {
     const linha = linhas[i];
     
-    // 1. Procura por O.S. e Protocolo (#104559 ou 104559)
-    const matchOs = linha.match(/#?(\d{5,6})/);
-    // 2. Procura por Data (20/11/2026 21:43)
-    const matchData = linha.match(/(\d{2}\/\d{2}\/\d{4})/);
-    
-    // 3. Procura o Assunto. Ex: "DVR INOPERANTE - 33036 - PEB"
-    // O Tesseract pode confundir o Ç, então usamos regex flexível
-    const matchAssunto = linha.match(/(DVR\s*INOPERANTE|GPS\s*SEM\s*COMUNICA[CÇ][AÃ]O)\s*[-–]\s*(\d+)\s*[-–]\s*([A-Z]{2,3})/i);
+    // Tenta achar tudo na mesma linha primeiro
+    const mOS = linha.match(regexOS);
+    const mData = linha.match(regexData);
+    const mAss = linha.match(regexAssunto);
 
-    // Se achar a O.S. na mesma linha do assunto (padrão da sua imagem)
-    if (matchOs && matchData && matchAssunto) {
-      const os = matchOs[1];
-      const data = matchData[1];
-      const tipoBruto = matchAssunto[1].toUpperCase();
-      const veiculo = matchAssunto[2];
-      const filial = matchAssunto[3];
-
-      let tipoServico = 'DVR INOPERANTE';
-      let codigo = '7';
-      let camera = 'CAMERA';
-
-      if (tipoBruto.includes('GPS')) {
-        tipoServico = 'GPS SEM COMUNICAÇÃO';
-        codigo = '8';
-        camera = 'TELEMETRIA';
-      }
-
-      chamados.push({
-        data, veiculo, os, filial, camera, codigo, tipoServico
-      });
-    } 
-    // Caso o Tesseract quebre a linha e o Assunto caia na linha de baixo
-    else if (linhas[i+1]) {
-      const linhaBaixo = linhas[i+1];
-      const matchAssuntoBaixo = linhaBaixo.match(/(DVR\s*INOPERANTE|GPS\s*SEM\s*COMUNICA[CÇ][AÃ]O)\s*[-–]\s*(\d+)\s*[-–]\s*([A-Z]{2,3})/i);
-      
-      if (matchOs && matchData && matchAssuntoBaixo) {
-        const os = matchOs[1];
-        const data = matchData[1];
-        const tipoBruto = matchAssuntoBaixo[1].toUpperCase();
-        const veiculo = matchAssuntoBaixo[2];
-        const filial = matchAssuntoBaixo[3];
-
-        let tipoServico = 'DVR INOPERANTE';
-        let codigo = '7';
-        let camera = 'CAMERA';
-
-        if (tipoBruto.includes('GPS')) {
-          tipoServico = 'GPS SEM COMUNICAÇÃO';
-          codigo = '8';
-          camera = 'TELEMETRIA';
+    if (mOS && mData && mAss) {
+      registrarChamado(mOS[1], mData[1], mAss[1], mAss[2], mAss[3], chamados);
+    } else {
+      // Se não achou tudo junto, tenta achar separadamente e junta com a próxima linha
+      if (mOS) osAtual = mOS[1];
+      if (mData) dataAtual = mData[1];
+      if (mAss) {
+        // Se achou o assunto mas não a OS/Data nessa linha, usa as variáveis da linha anterior
+        let os = mOS ? mOS[1] : osAtual;
+        let data = mData ? mData[1] : dataAtual;
+        if (os && data) {
+            registrarChamado(os, data, mAss[1], mAss[2], mAss[3], chamados);
+            osAtual = null; // limpa
+            dataAtual = null;
         }
-
-        chamados.push({
-          data, veiculo, os, filial, camera, codigo, tipoServico
-        });
-        i++; // Pula a próxima linha para não duplicar
       }
     }
   }
 
-  // Remove duplicatas (caso o Tesseract leia a mesma coisa duas vezes)
+  // Remove duplicatas
   const uniqueChamados = [];
   const vistos = new Set();
   for(const c of chamados) {
@@ -203,12 +204,28 @@ function formatarParaTSV(textoBruto) {
   // Ordena pelo número da O.S.
   uniqueChamados.sort((a, b) => parseInt(a.os) - parseInt(b.os));
 
-  // Gera o TSV final
   const linhasTSV = uniqueChamados.map(c => 
     `${c.data}\t${c.veiculo}\t${c.os}\t${c.filial}\t${c.camera}\t${c.codigo}\t${c.tipoServico}`
   );
 
   return linhasTSV.join('\n');
+}
+
+function registrarChamado(os, data, tipoBruto, veiculo, filial, array) {
+    let tipoServico = 'DVR INOPERANTE';
+    let codigo = '7';
+    let camera = 'CAMERA';
+
+    const tipoUpper = tipoBruto.toUpperCase();
+    if (tipoUpper.includes('GPS')) {
+      tipoServico = 'GPS SEM COMUNICAÇÃO';
+      codigo = '8';
+      camera = 'TELEMETRIA';
+    }
+
+    array.push({
+      data, veiculo, os, filial, camera, codigo, tipoServico
+    });
 }
 
 function copiarOCR() {
