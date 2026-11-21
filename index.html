@@ -143,17 +143,32 @@
 
           <div id="ocr-status" class="status hidden" style="text-align: center; margin-bottom: 20px;"></div>
 
-          <div id="ocr-resultado" class="hidden">
-            <div class="input-card">
+                    <div id="ocr-resultado" class="hidden">
+            <div class="input-card mb-2">
               <div class="input-head">
                 <span class="step">✓</span>
                 <div class="input-titles">
-                  <h2>Resultado (Copiar e Colar no Excel)</h2>
-                  <p>Verifique se os dados estão corretos antes de usar</p>
+                  <h2>Dados para Excel (TSV)</h2>
+                  <p>Copie e cole no Excel</p>
                 </div>
               </div>
-              <textarea id="ocr-output" rows="12" spellcheck="false"></textarea>
-              <button class="btn mt-2" onclick="copiarOCR()">Copiar Texto</button>
+              <textarea id="ocr-output" rows="8" spellcheck="false"></textarea>
+              <button class="btn mt-2" onclick="copiarTexto('ocr-output', event)">Copiar TSV</button>
+            </div>
+
+            <div class="input-card">
+              <div class="input-head" style="justify-content: space-between; align-items: center; width: 100%;">
+                <div style="display: flex; gap: 14px; align-items: flex-start;">
+                  <span class="step">✉️</span>
+                  <div class="input-titles">
+                    <h2>Mensagem Acumulada</h2>
+                    <p>Chamados lidos nesta sessão (sem duplicatas)</p>
+                  </div>
+                </div>
+                <button class="btn" onclick="limparHistoricoOCR()">Limpar Histórico</button>
+              </div>
+              <textarea id="ocr-mensagem" rows="12" spellcheck="false" style="background: var(--surface-alt);"></textarea>
+              <button class="btn mt-2" onclick="copiarTexto('ocr-mensagem', event)">Copiar Mensagem</button>
             </div>
           </div>
         </div>
