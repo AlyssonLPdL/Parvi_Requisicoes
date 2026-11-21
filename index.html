@@ -210,6 +210,21 @@
           </div>
         </div>
       </section>
+            <!-- CONSULTAS -->
+      <section id="painel-consultas" class="painel" hidden>
+        <div class="page-header">
+          <div class="page-header-text">
+            <h1>Consultas Rápidas</h1>
+            <p>Busque por Placa (Alocação) ou por Nome/Matrícula (Motoristas)</p>
+          </div>
+        </div>
+        <div class="workspace">
+          <div class="input-card">
+            <input type="text" id="input-busca" class="input-busca" placeholder="Digite a placa, nome ou matrícula..." oninput="realizarBusca()">
+          </div>
+          <div id="resultado-busca" class="resultado"></div>
+        </div>
+      </section>
 
     </main>
   </div>
@@ -223,6 +238,7 @@
   <script src="js/relatorio.js"></script>
   <script src="js/saida.js"></script>
   <script src="js/ocr.js"></script> <!-- NOVO SCRIPT -->
+  <script src="js/consultas.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
