@@ -162,7 +162,6 @@ function formatarParaTSV(textoBruto) {
     const matchData = linha.match(/(\d{2}\/\d{2}\/\d{4})/);
     if (matchData) dataAtual = matchData[1];
 
-    // Pega o Assunto, Veículo e Filial
     const matchAssunto = linha.match(/(DVR\s*INOPERANTE|GPS\s*SEM\s*COMUNICA[CÇ][AÃ]O)\s*[-–—]\s*(\d{5,6})\s*[-–—]\s*([A-Z]{2,3})/i);
 
     if (matchAssunto) {
@@ -180,7 +179,6 @@ function formatarParaTSV(textoBruto) {
         camera = 'TELEMETRIA';
       }
 
-      // Caça a O.S.
       let osFinal = null;
       const matchOSForcado = linha.match(/10\d{4}/);
       
@@ -206,33 +204,46 @@ function formatarParaTSV(textoBruto) {
   }
 
   // ==========================================
-  // CORREÇÃO SEQUENCIAL DE O.S. (A MÁGICA)
+  // A MÁGICA DO BURACO NA SEQUÊNCIA
   // ==========================================
-  // 1. Ordena a lista pelo número da O.S. (os que falharam ficam no topo como "000000")
-  chamados.sort((a, b) => parseInt(a.os) - parseInt(b.os));
+  
+  // Separa quem tem O.S. válida de quem falhou (000000)
+  const validos = chamados.filter(c => parseInt(c.os) > 0);
+  const invalidos = chamados.filter(c => parseInt(c.os) === 0);
 
-  // 2. Varre a lista procurando por O.S. zeradas ou buracos na sequência
-  for (let i = 1; i < chamados.length; i++) {
-    const osAnterior = parseInt(chamados[i - 1].os);
-    const osAtual = parseInt(chamados[i].os);
-
-    // Se a linha atual está zerada, assumimos que é o número anterior + 1
-    if (osAtual === 0 && osAnterior > 0) {
-      chamados[i].os = (osAnterior + 1).toString();
-    } 
-    // Se houver um buraco (ex: anterior 104553 e atual 104555), e estiver faltando APENAS 1
-    else if (osAtual - osAnterior === 2 && osAnterior > 0) {
-      // Se o próximo item for maior que o atual + 1, então o buraco está no meio
-      // (mas como o OCR errou a leitura da linha inteira, o buraco já foi tratado no if de cima)
-    }
+  if (validos.length > 0 && invalidos.length > 0) {
+      validos.sort((a, b) => parseInt(a.os) - parseInt(b.os));
+      
+      const minOS = parseInt(validos[0].os);
+      const maxOS = parseInt(validos[validos.length - 1].os);
+      
+      // Cria a lista de todos os números que DEVERIAM existir entre o menor e o maior
+      const osExistentes = new Set(validos.map(c => parseInt(c.os)));
+      const faltantes = [];
+      
+      for (let i = minOS; i <= maxOS; i++) {
+          if (!osExistentes.has(i)) {
+              faltantes.push(i);
+          }
+      }
+      
+      // Se a quantidade de números faltantes for igual à quantidade de inválidos, preenchemos!
+      if (faltantes.length === invalidos.length) {
+          faltantes.sort((a, b) => a - b); // Ordena os faltantes
+          for (let i = 0; i < invalidos.length; i++) {
+              invalidos[i].os = faltantes[i].toString();
+          }
+      }
   }
 
-  // Reordena por segurança para garantir (já que o 0 virou 104554)
-  chamados.sort((a, b) => parseInt(a.os) - parseInt(b.os));
+  // Junta tudo de volta e ordena
+  const todos = [...validos, ...invalidos];
+  todos.sort((a, b) => parseInt(a.os) - parseInt(b.os));
 
+  // Remove duplicatas por precaução
   const uniqueChamados = [];
   const vistos = new Set();
-  for(const c of chamados) {
+  for(const c of todos) {
       if(!vistos.has(c.os)) {
           vistos.add(c.os);
           uniqueChamados.push(c);
