@@ -152,21 +152,17 @@ function iniciarTesseract(imgBase64, statusEl, resultEl, outputEl) {
 }
 
 function formatarParaTSV(textoBruto) {
-  // Limpa o texto
   const linhas = textoBruto.split('\n').map(l => l.trim()).filter(l => l);
   const chamados = [];
-  
-  let dataAtual = "20/11/2026"; // Fallback
+  let dataAtual = "20/11/2026";
 
   for (let i = 0; i < linhas.length; i++) {
     const linha = linhas[i];
     
-    // 1. Pega a Data
     const matchData = linha.match(/(\d{2}\/\d{2}\/\d{4})/);
     if (matchData) dataAtual = matchData[1];
 
-    // 2. Pega o Assunto, Veículo e Filial (A âncora de tudo)
-    // Ex: "DVR INOPERANTE - 33036 - PEB" ou "GPS SEM COMUNICAÇÃO - 55044 - MA"
+    // 1. Pega o Assunto (DVR / GPS), o Veículo e a Filial
     const matchAssunto = linha.match(/(DVR\s*INOPERANTE|GPS\s*SEM\s*COMUNICA[CÇ][AÃ]O)\s*[-–—]\s*(\d{5,6})\s*[-–—]\s*([A-Z]{2,3})/i);
 
     if (matchAssunto) {
@@ -184,46 +180,35 @@ function formatarParaTSV(textoBruto) {
         camera = 'TELEMETRIA';
       }
 
-      // 3. Agora vamos caçar a O.S. na linha inteira.
-      // A O.S. é o número que NÃO é o veículo e geralmente tem 5 ou 6 dígitos.
-      // O Tesseract pode ler o "#" como "4" ou "S", então extraímos TODOS os números da linha
-      const todosNumeros = linha.match(/\d+/g) || [];
-      
+      // 2. Caça a O.S. 
+      // Tenta achar qualquer número de 6 dígitos que comece com 10 na linha inteira
       let osFinal = "000000";
-      for (const num of todosNumeros) {
-        // Se o número for diferente do veículo, tiver 5 ou 6 dígitos e começar com 10 (padrão das suas O.S.)
-        // Ou se for o único número grande na linha
-        if (num !== veiculo && num.length >= 5 && num.length <= 6) {
-            // Limpa possíveis lixos do começo (se o OCR leu o # como 4)
-            if (num.startsWith('4104')) {
-                osFinal = '10' + num.substring(4); // Corrige "4104559" para "104559"
-            } else if (num.startsWith('410')) {
-                osFinal = '10' + num.substring(3); // Corrige "410455" para "10455"
-            } else {
-                osFinal = num; // Se veio certo (ex: 104552)
-            }
-            break; // Achou a O.S., para de procurar
+      
+      // Procura o padrão 10XXXX (6 dígitos) em qualquer lugar da linha, mesmo colado em letras
+      const matchOSForcado = linha.match(/10\d{4}/);
+      
+      if (matchOSForcado) {
+        osFinal = matchOSForcado[0];
+      } else {
+        // Fallback: tenta os métodos anteriores (número solto de 5 ou 6 dígitos diferente do veículo)
+        const todosNumeros = linha.match(/\d+/g) || [];
+        for (const num of todosNumeros) {
+          if (num !== veiculo && num.length >= 5 && num.length <= 6) {
+              if (num.startsWith('4104')) osFinal = '10' + num.substring(4);
+              else if (num.startsWith('410')) osFinal = '10' + num.substring(3);
+              else if (num.length === 5 && num.startsWith('0')) osFinal = '1' + num;
+              else osFinal = num;
+              break;
+          }
         }
       }
 
-      // Tratamento especial: se o Tesseract cortou o '1' do começo (ex: 04555 em vez de 104555)
-      if (osFinal.length === 5 && osFinal.startsWith('0')) {
-          osFinal = '1' + osFinal; // Vira 104555
-      }
-
       chamados.push({
-        data: dataAtual, 
-        veiculo: veiculo, 
-        os: osFinal, 
-        filial: filial, 
-        camera: camera, 
-        codigo: codigo, 
-        tipoServico: tipoServico
+        data: dataAtual, veiculo, os: osFinal, filial, camera, codigo, tipoServico
       });
     }
   }
 
-  // Remove duplicatas e Ordena
   const uniqueChamados = [];
   const vistos = new Set();
   for(const c of chamados) {
