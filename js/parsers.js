@@ -44,7 +44,7 @@ function parseAlocacao(texto) {
     
     mapa.set(ordem, {
       localizado_original: localizado,
-      filial: normalizarSiglaLocalizado(localizado),
+      filial: normalizarFilialDVR(localizado), // <-- CORRIGIDO AQUI
       placa: placa,
       linha_original: linhas[i]
     });
