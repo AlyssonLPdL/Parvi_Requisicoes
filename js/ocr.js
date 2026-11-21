@@ -2,7 +2,10 @@
 
 let ocrProcessando = false;
 
+// Ao carregar a página, atualiza a mensagem com o que já está salvo
 document.addEventListener('DOMContentLoaded', () => {
+  atualizarMensagemAcumulada();
+  
   const dropzone = document.getElementById('ocr-dropzone');
   const fileInput = document.getElementById('ocr-file-input');
 
@@ -30,7 +33,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('paste', (e) => {
     const painelOcr = document.getElementById('painel-ocr');
     if (painelOcr && !painelOcr.hidden) {
-      // Se colar texto puro (copiado da tela)
       if (e.clipboardData.getData('text')) {
         const texto = e.clipboardData.getData('text');
         if (texto.trim().length > 10) {
@@ -38,7 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
       }
-      // Se colar imagem
       const items = e.clipboardData.items;
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
@@ -50,6 +51,75 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
+/* ===================== HISTÓRICO ===================== */
+function getHistorico() {
+  try {
+    return JSON.parse(localStorage.getItem('historico_chamados_ocr') || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+
+function salvarHistorico(lista) {
+  localStorage.setItem('historico_chamados_ocr', JSON.stringify(lista));
+}
+
+function adicionarAoHistorico(novosChamados) {
+  const historico = getHistorico();
+  let adicionou = false;
+
+  for (const novo of novosChamados) {
+    // Se a O.S. já existe no histórico, ignora
+    if (!historico.find(c => c.os === novo.os)) {
+      historico.push(novo);
+      adicionou = true;
+    }
+  }
+
+  if (adicionou) {
+    // Ordena pelo número da O.S. para manter a sequência bonita
+    historico.sort((a, b) => parseInt(a.os) - parseInt(b.os));
+    salvarHistorico(historico);
+    atualizarMensagemAcumulada();
+  }
+}
+
+function limparHistoricoOCR() {
+  if (confirm('Tem certeza que deseja limpar todo o histórico de chamados lidos?')) {
+    localStorage.removeItem('historico_chamados_ocr');
+    atualizarMensagemAcumulada();
+    document.getElementById('ocr-resultado').classList.add('hidden');
+  }
+}
+
+function atualizarMensagemAcumulada() {
+  const historico = getHistorico();
+  const txtMsg = document.getElementById('ocr-mensagem');
+  if (!txtMsg) return;
+
+  if (historico.length === 0) {
+    txtMsg.value = '';
+    return;
+  }
+
+  const dataAtual = new Date().toLocaleDateString('pt-BR');
+  
+  let mensagem = `Chamados abertos ${dataAtual}:\n\n`;
+  
+  for (const c of historico) {
+    // Ajusta o nome do equipamento para ficar igual ao seu exemplo
+    let equipamento = c.camera; // CAMERA ou TELEMETRIA
+    
+    // Formato: Data \t Veiculo \t OS \t Filial \t Equipamento
+    mensagem += `${c.data}\t${c.veiculo}\t${c.os}\t${c.filial}\t${equipamento}\n`;
+  }
+  
+  mensagem += `\nAtt: Alysson leite, ${dataAtual}, 18:00 às 06:00`;
+
+  txtMsg.value = mensagem;
+}
+
+/* ===================== OCR E PROCESSAMENTO ===================== */
 function processarTextoPuro(texto) {
   const statusEl = document.getElementById('ocr-status');
   const resultEl = document.getElementById('ocr-resultado');
@@ -59,9 +129,11 @@ function processarTextoPuro(texto) {
   statusEl.className = 'status ocr-loading';
   statusEl.textContent = 'Formatando texto...';
 
-  const tsv = formatarParaTSV(texto);
-  if (tsv) {
-    outputEl.value = tsv;
+  const chamados = extrairDados(texto);
+  
+  if (chamados.length > 0) {
+    outputEl.value = gerarTSV(chamados);
+    adicionarAoHistorico(chamados);
     resultEl.classList.remove('hidden');
     statusEl.classList.add('hidden');
   } else {
@@ -92,21 +164,13 @@ function processarImagemOCR(file) {
     
     ctx.drawImage(img, 0, 0);
     
-    // Filtro agressivo: Transforma em Preto e Branco puro (Binarização)
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
     
     for (let i = 0; i < data.length; i += 4) {
-      // Calcula a luminosidade do pixel
       const luminosidade = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
-      
-      // Se for escuro, vira preto (0). Se for claro, vira branco (255).
-      // Isso ignora tons de cinza e melhora o OCR em interfaces dark.
       const cor = luminosidade > 128 ? 255 : 0; 
-      
-      data[i] = cor;         // R
-      data[i + 1] = cor;     // G
-      data[i + 2] = cor;     // B
+      data[i] = cor; data[i + 1] = cor; data[i + 2] = cor;
     }
     
     ctx.putImageData(imageData, 0, 0);
@@ -120,26 +184,23 @@ function processarImagemOCR(file) {
 function iniciarTesseract(imgBase64, statusEl, resultEl, outputEl) {
   statusEl.textContent = 'Lendo imagem...';
 
-  Tesseract.recognize(
-    imgBase64,
-    'por',
-    {
+  Tesseract.recognize(imgBase64, 'por', {
       logger: m => {
         if (m.status === 'recognizing text') {
           statusEl.textContent = `Lendo imagem... ${Math.round(m.progress * 100)}%`;
         }
       }
-    }
-  ).then(({ data: { text } }) => {
+  }).then(({ data: { text } }) => {
     statusEl.textContent = 'Formatando dados...';
-    const tsv = formatarParaTSV(text);
+    const chamados = extrairDados(text);
     
-    if (tsv) {
-      outputEl.value = tsv;
+    if (chamados.length > 0) {
+      outputEl.value = gerarTSV(chamados);
+      adicionarAoHistorico(chamados);
       resultEl.classList.remove('hidden');
       statusEl.classList.add('hidden');
     } else {
-      statusEl.innerHTML = 'Não foi possível ler a imagem. <br><br><b>Dica:</b> Use a Ferramenta de Captura do Windows (Win + Shift + S), recorte a área e tente novamente. Ou selecione o texto na tela e dê Ctrl+C para colar como texto.';
+      statusEl.innerHTML = 'Não foi possível ler a imagem. Tente novamente com uma imagem mais nítida.';
       statusEl.style.color = 'var(--danger)';
     }
   }).catch(err => {
@@ -151,10 +212,11 @@ function iniciarTesseract(imgBase64, statusEl, resultEl, outputEl) {
   });
 }
 
-function formatarParaTSV(textoBruto) {
+/* ===================== EXTRAÇÃO E FORMATAÇÃO ===================== */
+function extrairDados(textoBruto) {
   const linhas = textoBruto.split('\n').map(l => l.trim()).filter(l => l);
   const chamados = [];
-  let dataAtual = "20/11/2026";
+  let dataAtual = new Date().toLocaleDateString('pt-BR');
 
   for (let i = 0; i < linhas.length; i++) {
     const linha = linhas[i];
@@ -203,44 +265,32 @@ function formatarParaTSV(textoBruto) {
     }
   }
 
-  // ==========================================
-  // A MÁGICA DO BURACO NA SEQUÊNCIA
-  // ==========================================
-  
-  // Separa quem tem O.S. válida de quem falhou (000000)
+  // MÁGICA DO BURACO NA SEQUÊNCIA
   const validos = chamados.filter(c => parseInt(c.os) > 0);
   const invalidos = chamados.filter(c => parseInt(c.os) === 0);
 
   if (validos.length > 0 && invalidos.length > 0) {
       validos.sort((a, b) => parseInt(a.os) - parseInt(b.os));
-      
       const minOS = parseInt(validos[0].os);
       const maxOS = parseInt(validos[validos.length - 1].os);
-      
-      // Cria a lista de todos os números que DEVERIAM existir entre o menor e o maior
       const osExistentes = new Set(validos.map(c => parseInt(c.os)));
       const faltantes = [];
       
       for (let i = minOS; i <= maxOS; i++) {
-          if (!osExistentes.has(i)) {
-              faltantes.push(i);
-          }
+          if (!osExistentes.has(i)) faltantes.push(i);
       }
       
-      // Se a quantidade de números faltantes for igual à quantidade de inválidos, preenchemos!
       if (faltantes.length === invalidos.length) {
-          faltantes.sort((a, b) => a - b); // Ordena os faltantes
+          faltantes.sort((a, b) => a - b);
           for (let i = 0; i < invalidos.length; i++) {
               invalidos[i].os = faltantes[i].toString();
           }
       }
   }
 
-  // Junta tudo de volta e ordena
   const todos = [...validos, ...invalidos];
   todos.sort((a, b) => parseInt(a.os) - parseInt(b.os));
 
-  // Remove duplicatas por precaução
   const uniqueChamados = [];
   const vistos = new Set();
   for(const c of todos) {
@@ -250,13 +300,20 @@ function formatarParaTSV(textoBruto) {
       }
   }
 
-  return uniqueChamados.map(c => 
+  return uniqueChamados;
+}
+
+function gerarTSV(chamados) {
+  return chamados.map(c => 
     `${c.data}\t${c.veiculo}\t${c.os}\t${c.filial}\t${c.camera}\t${c.codigo}\t${c.tipoServico}`
   ).join('\n');
 }
 
-function copiarOCR() {
-  const textarea = document.getElementById('ocr-output');
+/* ===================== UTILITÁRIOS ===================== */
+// Função genérica para copiar qualquer textarea
+function copiarTexto(idTextarea, event) {
+  const textarea = document.getElementById(idTextarea);
+  if(!textarea) return;
   textarea.select();
   document.execCommand('copy');
   window.getSelection().removeAllRanges();
