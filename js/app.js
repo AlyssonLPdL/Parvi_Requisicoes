@@ -2,15 +2,21 @@
 
 /* ===================== ABAS ===================== */
 function ativarAba(nome) {
+  // Atualiza a classe de todos os botões da sidebar
   document.querySelectorAll('.tab').forEach(b => {
     b.classList.toggle('ativo', b.dataset.tab === nome);
   });
+
+  // Mostra o painel correto e esconde os outros
   document.querySelectorAll('.painel').forEach(p => {
     p.hidden = (p.id !== 'painel-' + nome);
   });
+
+  // Se for insumos, atualiza a tela com os dados salvos
   if (nome === 'insumos') renderInsumos();
 }
 
+// Adiciona o evento de clique em todos os botões com a classe .tab
 document.querySelectorAll('.tab').forEach(btn => {
   btn.addEventListener('click', () => ativarAba(btn.dataset.tab));
 });
@@ -38,19 +44,23 @@ function renderInsumos() {
   }
 }
 
-document.getElementById('btn-salvar-insumos').addEventListener('click', () => {
-  const aloc = document.getElementById('txt-alocacao').value;
-  const ret  = document.getElementById('txt-retidos').value;
-  salvarInsumos(aloc, ret);
-  const st = document.getElementById('status-insumos');
-  st.textContent = 'Salvos em ' + new Date().toLocaleString('pt-BR');
-  setTimeout(() => { st.textContent = ''; }, 4000);
-  renderInsumos();
-});
+const btnSalvarInsumos = document.getElementById('btn-salvar-insumos');
+if (btnSalvarInsumos) {
+  btnSalvarInsumos.addEventListener('click', () => {
+    const aloc = document.getElementById('txt-alocacao').value;
+    const ret  = document.getElementById('txt-retidos').value;
+    salvarInsumos(aloc, ret);
+    const st = document.getElementById('status-insumos');
+    st.textContent = 'Salvos em ' + new Date().toLocaleString('pt-BR');
+    setTimeout(() => { st.textContent = ''; }, 4000);
+    renderInsumos();
+  });
+}
 
 /* ===================== PROCESSAMENTO ===================== */
 function limparResultado(tipo) {
   const box = document.getElementById('result-' + tipo);
+  if (!box) return null;
   box.innerHTML = '';
   return box;
 }
@@ -87,16 +97,22 @@ function processar(tipo) {
   const resultados = veiculos.map(v => proc(v, ctx));
 
   const box = limparResultado(tipo);
+  if (!box) return;
+  
   renderResumo(box, resultados);
-  renderCopys(box, resultados, tipo);
+  renderCopys(box, resultados, tipo); // <-- Aqui está o tipo sendo passado corretamente
   renderTabela(box, resultados, tipo);
   renderDownloads(box, resultados, tipo);
 }
 
-document.getElementById('btn-processar-gps').addEventListener('click', () => processar('gps'));
-document.getElementById('btn-processar-dvr').addEventListener('click', () => processar('dvr'));
+const btnGps = document.getElementById('btn-processar-gps');
+if (btnGps) btnGps.addEventListener('click', () => processar('gps'));
+
+const btnDvr = document.getElementById('btn-processar-dvr');
+if (btnDvr) btnDvr.addEventListener('click', () => processar('dvr'));
 
 /* ===================== INICIALIZAÇÃO ===================== */
 document.addEventListener('DOMContentLoaded', () => {
+  // Inicia na aba GPS por padrão
   ativarAba('gps');
 });
