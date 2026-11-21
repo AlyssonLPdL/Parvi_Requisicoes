@@ -2,14 +2,14 @@
 
 const LS_KEY_ALOC = 'gpsdvr_alocacao_v1';
 const LS_KEY_RET  = 'gpsdvr_retidos_v1';
-const LS_KEY_MOT  = 'gpsdvr_motoristas_v1'; // Nova chave
+const LS_KEY_MOT  = 'gpsdvr_motoristas_v1'; // NOVO
 const LS_TTL_MS   = 7 * 24 * 60 * 60 * 1000; // 7 dias
 
 function salvarInsumos(alocacaoTexto, retidosTexto, motoristasTexto) {
   const agora = Date.now();
   localStorage.setItem(LS_KEY_ALOC, JSON.stringify({ texto: alocacaoTexto, ts: agora }));
   localStorage.setItem(LS_KEY_RET,  JSON.stringify({ texto: retidosTexto,  ts: agora }));
-  localStorage.setItem(LS_KEY_MOT,  JSON.stringify({ texto: motoristasTexto, ts: agora }));
+  localStorage.setItem(LS_KEY_MOT,  JSON.stringify({ texto: motoristasTexto, ts: agora })); // NOVO
 }
 
 function lerInsumo(key) {
@@ -34,11 +34,10 @@ function carregarInsumos() {
   return {
     alocacao: lerInsumo(LS_KEY_ALOC),
     retidos:  lerInsumo(LS_KEY_RET),
-    motoristas: lerInsumo(LS_KEY_MOT) // Novo insumo
+    motoristas: lerInsumo(LS_KEY_MOT) // NOVO
   };
 }
 
-/** Texto do alarme para a aba Insumos. */
 function textoAlarmeInsumo(nome, info) {
   if (!info.existe) return null;
   const dias = Math.floor(info.idadeMs / (24 * 3600 * 1000));
