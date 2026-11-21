@@ -1,15 +1,12 @@
 'use strict';
 
-/* ===================== ABAS ===================== */
 function ativarAba(nome) {
   document.querySelectorAll('.tab').forEach(b => {
     b.classList.toggle('ativo', b.dataset.tab === nome);
   });
-
   document.querySelectorAll('.painel').forEach(p => {
     p.hidden = (p.id !== 'painel-' + nome);
   });
-
   if (nome === 'insumos') renderInsumos();
   if (nome === 'consultas') {
     const input = document.getElementById('input-busca');
@@ -26,20 +23,16 @@ document.querySelectorAll('.tab').forEach(btn => {
 /* ===================== INSUMOS ===================== */
 function renderInsumos() {
   const ins = carregarInsumos();
-  
   document.getElementById('txt-alocacao').value = ins.alocacao.texto;
   document.getElementById('txt-retidos').value  = ins.retidos.texto;
-  
   const elMot = document.getElementById('txt-motoristas');
   if (elMot) elMot.value = ins.motoristas.texto;
 
   const alarme = document.getElementById('alarme-insumos');
   const partes = [];
-  
   const a1 = textoAlarmeInsumo('Alocação', ins.alocacao);
   const a2 = textoAlarmeInsumo('Retidos',  ins.retidos);
   const a3 = textoAlarmeInsumo('Motoristas', ins.motoristas);
-
   if (a1) partes.push(a1);
   if (a2) partes.push(a2);
   if (a3) partes.push(a3);
@@ -59,9 +52,7 @@ if (btnSalvarInsumos) {
     const aloc = document.getElementById('txt-alocacao').value;
     const ret  = document.getElementById('txt-retidos').value;
     const mot  = document.getElementById('txt-motoristas') ? document.getElementById('txt-motoristas').value : '';
-    
     salvarInsumos(aloc, ret, mot);
-    
     const st = document.getElementById('status-insumos');
     st.textContent = 'Salvos em ' + new Date().toLocaleString('pt-BR');
     setTimeout(() => { st.textContent = ''; }, 4000);
@@ -79,14 +70,16 @@ function limparResultado(tipo) {
 
 function processar(tipo) {
   const ins = carregarInsumos();
-
-  if (ins.alocacao.vencido && !confirm('Insumos de ALOCAÇÃO vencidos. Processar mesmo assim?')) return;
-  if (ins.retidos.vencido && !confirm('Insumos de RETIDOS vencidos. Processar mesmo assim?')) return;
+  if (ins.alocacao.vencido && !confirm('Alocação vencida. Processar mesmo assim?')) return;
+  if (ins.retidos.vencido && !confirm('Retidos vencidos. Processar mesmo assim?')) return;
 
   const alocacao = parseAlocacao(ins.alocacao.texto);
   const retidos  = parseRetidos(ins.retidos.texto);
 
-  // CORREÇÃO: Map usa .size, não .length
+  // DEBUG: Mostra no console se a alocação leu os veículos certos
+  console.log("Alocação carregada com " + (alocacao.size || 0) + " itens.");
+  console.log("Primeiros 5 veículos na alocação:", Array.from(alocacao.keys()).slice(0, 5));
+
   if (!alocacao || alocacao.size === 0) {
     alert('Nenhum registro de alocação encontrado. Salve a alocação na aba Insumos.');
     return;
@@ -106,7 +99,6 @@ function processar(tipo) {
   const proc = tipo === 'gps' ? processarGPS : processarDVR;
 
   const resultados = veiculos.map(v => proc(v, ctx));
-
   const box = limparResultado(tipo);
   if (!box) return;
   
