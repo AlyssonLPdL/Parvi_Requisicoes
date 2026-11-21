@@ -729,3 +729,41 @@ table.tabela tr.linha-removida td.motivo {
   .copy-header { flex-direction: column; align-items: stretch; }
   .copy-header .btn { width: 100%; justify-content: center; }
 }
+
+/* ============================================
+   OCR / DROPZONE
+   ============================================ */
+.dropzone {
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 40px 20px;
+  width: 100%;
+  max-width: 500px;
+  cursor: pointer;
+  transition: all var(--transition);
+  background: var(--surface-alt);
+}
+
+.dropzone:hover, .dropzone.dragover {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.dropzone h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--primary);
+}
+
+.dropzone p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.status.ocr-loading {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.mt-2 { margin-top: 12px; }
