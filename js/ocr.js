@@ -5,14 +5,14 @@ let ocrProcessando = false;
 // Ao carregar a página, atualiza a mensagem com o que já está salvo
 document.addEventListener('DOMContentLoaded', () => {
   atualizarMensagemAcumulada();
-  
+
   const dropzone = document.getElementById('ocr-dropzone');
   const fileInput = document.getElementById('ocr-file-input');
 
   if (!dropzone) return;
 
   dropzone.addEventListener('click', () => fileInput.click());
-  
+
   fileInput.addEventListener('change', (e) => {
     if (e.target.files.length) processarImagemOCR(e.target.files[0]);
   });
@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ===================== HISTÓRICO ===================== */
+
 function getHistorico() {
   try {
     return JSON.parse(localStorage.getItem('historico_chamados_ocr') || '[]');
@@ -64,22 +65,61 @@ function salvarHistorico(lista) {
   localStorage.setItem('historico_chamados_ocr', JSON.stringify(lista));
 }
 
+// Mantém os chamados em ordem numérica crescente pela O.S.
+// Chamados sem protocolo identificado ficam no final.
+function ordenarChamadosPorOS(chamados) {
+  return [...chamados].sort((a, b) => {
+    const textoA = String(a.os || '').trim();
+    const textoB = String(b.os || '').trim();
+    const numeroA = /^\d{6}$/.test(textoA) ? Number(textoA) : Infinity;
+    const numeroB = /^\d{6}$/.test(textoB) ? Number(textoB) : Infinity;
+
+    if (numeroA !== numeroB) return numeroA - numeroB;
+    return String(a.veiculo || '').localeCompare(String(b.veiculo || ''), 'pt-BR', { numeric: true });
+  });
+}
+
+// Remove somente repetições do mesmo chamado, não chamados diferentes
+// que tenham recebido o mesmo protocolo provisório na primeira leitura.
+function removerDuplicadosPorIdentidade(chamados) {
+  const vistos = new Set();
+
+  return chamados.filter(c => {
+    const chave = [
+      String(c.data || ''),
+      String(c.veiculo || ''),
+      String(c.filial || ''),
+      String(c.camera || ''),
+      String(c.tipoServico || ''),
+      String(c.os || '')
+    ].join('|');
+
+    if (vistos.has(chave)) return false;
+    vistos.add(chave);
+    return true;
+  });
+}
+
 function adicionarAoHistorico(novosChamados) {
   const historico = getHistorico();
   let adicionou = false;
 
   for (const novo of novosChamados) {
-    // Se a O.S. já existe no histórico, ignora
-    if (!historico.find(c => c.os === novo.os)) {
+    // A identidade considera também veículo/data/filial. Não basta comparar
+    // apenas a O.S., pois a primeira leitura pode confundir dois protocolos.
+    const chaveNovo = [novo.data, novo.veiculo, novo.filial, novo.camera, novo.tipoServico, novo.os || ''].join('|');
+    const jaExiste = historico.some(c =>
+      [c.data, c.veiculo, c.filial, c.camera, c.tipoServico, c.os || ''].join('|') === chaveNovo
+    );
+
+    if (!jaExiste) {
       historico.push(novo);
       adicionou = true;
     }
   }
 
   if (adicionou) {
-    // Ordena pelo número da O.S. para manter a sequência bonita
-    historico.sort((a, b) => parseInt(a.os) - parseInt(b.os));
-    salvarHistorico(historico);
+    salvarHistorico(ordenarChamadosPorOS(historico));
     atualizarMensagemAcumulada();
   }
 }
@@ -93,7 +133,7 @@ function limparHistoricoOCR() {
 }
 
 function atualizarMensagemAcumulada() {
-  const historico = getHistorico();
+  const historico = ordenarChamadosPorOS(getHistorico());
   const txtMsg = document.getElementById('ocr-mensagem');
   if (!txtMsg) return;
 
@@ -103,22 +143,21 @@ function atualizarMensagemAcumulada() {
   }
 
   const dataAtual = new Date().toLocaleDateString('pt-BR');
-  
+
   let mensagem = `Chamados abertos ${dataAtual}:\n\n`;
-  
+
   for (const c of historico) {
     // Ajusta o nome do equipamento para ficar igual ao seu exemplo
     let equipamento = c.camera; // CAMERA ou TELEMETRIA
-    
+
     // Formato: Data \t Veiculo \t OS \t Filial \t Equipamento
     mensagem += `${c.data}\t${c.veiculo}\t${c.os}\t${c.filial}\t${equipamento}\n`;
   }
-  
+
   mensagem += `\nAtt: Alysson leite, ${dataAtual}, 18:00 às 06:00`;
 
   txtMsg.value = mensagem;
 }
-
 
 
 /* ===================== OCR REFORÇADO DO PROTOCOLO ===================== */
@@ -309,7 +348,9 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
     || null;
 }
 
+
 /* ===================== OCR E PROCESSAMENTO ===================== */
+
 function processarTextoPuro(texto) {
   const statusEl = document.getElementById('ocr-status');
   const resultEl = document.getElementById('ocr-resultado');
@@ -320,7 +361,7 @@ function processarTextoPuro(texto) {
   statusEl.textContent = 'Formatando texto...';
 
   const chamados = extrairDados(texto);
-  
+
   if (chamados.length > 0) {
     outputEl.value = gerarTSV(chamados);
     adicionarAoHistorico(chamados);
@@ -437,14 +478,19 @@ async function iniciarTesseract(img, statusEl, resultEl, outputEl) {
     }
   }
 
-  // Atualiza resultado depois das duas leituras
-  outputEl.value = gerarTSV(chamados);
+  // Só agora, depois de todos os recortes, remove repetições exatas
+  // e ordena pelos protocolos já corrigidos pela segunda leitura.
+  const chamadosFinais = removerDuplicadosPorIdentidade(chamados);
+  const chamadosOrdenados = ordenarChamadosPorOS(chamadosFinais);
 
-  adicionarAoHistorico(chamados);
+  outputEl.value = gerarTSV(chamadosOrdenados);
+
+  adicionarAoHistorico(chamadosOrdenados);
 
   resultEl.classList.remove('hidden');
   statusEl.classList.add('hidden');
 }
+
 
 /* ===================== IDENTIFICAÇÃO DO PROTOCOLO ===================== */
 
@@ -566,7 +612,9 @@ function localizarNumeroOS(linhas, indice, veiculo) {
     || null;
 }
 
+
 /* ===================== EXTRAÇÃO E FORMATAÇÃO ===================== */
+
 function extrairDados(textoBruto) {
 
   const linhas = String(textoBruto || '')
@@ -625,88 +673,21 @@ function extrairDados(textoBruto) {
     });
   }
 
-  /* ===================== AJUSTE DE SEQUÊNCIA ===================== */
-
-  const validos = chamados.filter(c =>
-    c.os && /^\d+$/.test(String(c.os)) && Number(c.os) > 0
-  );
-
-  const invalidos = chamados.filter(c => !c.os);
-
-  if (validos.length > 0 && invalidos.length > 0) {
-
-    validos.sort((a, b) => Number(a.os) - Number(b.os));
-
-    const minOS = Number(validos[0].os);
-    const maxOS = Number(validos[validos.length - 1].os);
-
-    const osExistentes = new Set(
-      validos.map(c => Number(c.os))
-    );
-
-    const faltantes = [];
-
-    for (let numero = minOS; numero <= maxOS; numero++) {
-
-      if (!osExistentes.has(numero)) {
-        faltantes.push(numero);
-      }
-    }
-
-    // Só preenche quando a quantidade de lacunas for exatamente igual
-    // à quantidade de chamados sem O.S. identificada
-    if (faltantes.length === invalidos.length) {
-
-      faltantes.sort((a, b) => a - b);
-
-      for (let i = 0; i < invalidos.length; i++) {
-        invalidos[i].os = String(faltantes[i]);
-      }
-    }
-  }
-
-  /* ===================== ORDENAÇÃO ===================== */
-
-  const todos = [...validos, ...invalidos];
-
-  todos.sort((a, b) => {
-
-    const numeroA = a.os ? Number(a.os) : Infinity;
-    const numeroB = b.os ? Number(b.os) : Infinity;
-
-    return numeroA - numeroB;
-  });
-
-  /* ===================== ELIMINAR DUPLICADOS ===================== */
-
-  const uniqueChamados = [];
-  const vistos = new Set();
-
-  for (const chamado of todos) {
-
-    // Não elimina chamados diferentes só porque não foi possível
-    // identificar o protocolo deles.
-    if (!chamado.os) {
-      uniqueChamados.push(chamado);
-      continue;
-    }
-
-    if (!vistos.has(chamado.os)) {
-      vistos.add(chamado.os);
-      uniqueChamados.push(chamado);
-    }
-  }
-
-  return uniqueChamados;
+  // IMPORTANTE: não ordenar nem eliminar duplicados nesta etapa.
+  // O OCR inicial pode confundir protocolos (ex.: 104573 e 104578 como
+  // 110457). Todos os chamados precisam chegar à segunda leitura individual.
+  return chamados;
 }
 
 function gerarTSV(chamados) {
-  return chamados.map(c =>
+  return ordenarChamadosPorOS(chamados).map(c =>
     `${c.data}\t${c.veiculo}\t${c.os || 'NÃO IDENTIFICADA'}\t${c.filial}\t${c.camera}\t${c.codigo}\t${c.tipoServico}`
   ).join('\n');
 }
 
+
 /* ===================== UTILITÁRIOS ===================== */
+
 // Função genérica para copiar qualquer textarea
 function copiarTexto(idTextarea, event) {
   const textarea = document.getElementById(idTextarea);
@@ -714,7 +695,7 @@ function copiarTexto(idTextarea, event) {
   textarea.select();
   document.execCommand('copy');
   window.getSelection().removeAllRanges();
-  
+
   const btn = event.target;
   const textoOriginal = btn.textContent;
   btn.textContent = 'Copiado!';
