@@ -119,6 +119,127 @@ function atualizarMensagemAcumulada() {
   txtMsg.value = mensagem;
 }
 
+
+/* ===================== RECORTE INTELIGENTE DO PROTOCOLO ===================== */
+
+async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
+
+  const palavras = dadosOCR.words || [];
+
+  // Procura a posição do veículo na imagem
+  const veiculo = String(chamado.veiculo);
+
+  let palavraVeiculo = palavras.find(p =>
+    p.text.replace(/\D/g, '') === veiculo
+  );
+
+  // Se não encontrar o veículo, procura o assunto
+  if (!palavraVeiculo) {
+
+    const termo = chamado.tipoServico.includes('GPS')
+      ? 'GPS'
+      : 'DVR';
+
+    palavraVeiculo = palavras.find(p =>
+      p.text.toUpperCase().includes(termo)
+    );
+  }
+
+  if (!palavraVeiculo) {
+    console.warn('Não foi possível localizar a linha:', chamado.veiculo);
+    return null;
+  }
+
+  // Coordenadas reais da palavra encontrada
+  const box = palavraVeiculo.bbox;
+
+  const alturaPalavra = Math.max(
+    box.y1 - box.y0,
+    img.height * 0.008
+  );
+
+  // Margem dinâmica: considera a altura real do texto
+  const margemSuperior = alturaPalavra * 4;
+  const margemInferior = alturaPalavra * 3;
+
+  let yInicial = Math.max(
+    0,
+    Math.floor(box.y0 - margemSuperior)
+  );
+
+  let yFinal = Math.min(
+    img.height,
+    Math.ceil(box.y1 + margemInferior)
+  );
+
+  const alturaRecorte = yFinal - yInicial;
+
+  // Recorta toda a largura da imagem
+  const canvas = document.createElement('canvas');
+
+  const escala = 3;
+
+  canvas.width = img.width * escala;
+  canvas.height = alturaRecorte * escala;
+
+  const ctx = canvas.getContext('2d');
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  ctx.drawImage(
+    img,
+    0,
+    yInicial,
+    img.width,
+    alturaRecorte,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  console.log('Recorte do protocolo:', {
+    veiculo,
+    imagemOriginal: `${img.width}x${img.height}`,
+    recorte: `${canvas.width}x${canvas.height}`,
+    posicaoY: yInicial
+  });
+
+  const imagemRecortada = canvas.toDataURL('image/png');
+
+  // Segunda leitura: prioriza números
+  const resultado = await Tesseract.recognize(
+    imagemRecortada,
+    'eng',
+    {
+      tessedit_char_whitelist: '0123456789#',
+      tessedit_pageseg_mode: '6'
+    }
+  );
+
+  console.log(
+    'SEGUNDA LEITURA DO PROTOCOLO:',
+    resultado.data.text
+  );
+
+  const texto = resultado.data.text || '';
+
+  // Procura números de seis dígitos
+  const encontrados = texto.match(
+    /[0-9]{6}/g
+  ) || [];
+
+  // Elimina o número do veículo
+  const candidatos = [...new Set(encontrados)]
+    .filter(numero => numero !== veiculo);
+
+  // Prioriza protocolos iniciados em 10
+  return candidatos.find(numero => numero.startsWith('10'))
+    || candidatos[0]
+    || null;
+}
+
 /* ===================== OCR E PROCESSAMENTO ===================== */
 function processarTextoPuro(texto) {
   const statusEl = document.getElementById('ocr-status');
@@ -142,8 +263,10 @@ function processarTextoPuro(texto) {
   }
 }
 
+
 function processarImagemOCR(file) {
-  if (ocrProcessando) return;
+  if (ocrProcessando || !file) return;
+
   ocrProcessando = true;
 
   const statusEl = document.getElementById('ocr-status');
@@ -153,91 +276,124 @@ function processarImagemOCR(file) {
   resultEl.classList.add('hidden');
   statusEl.classList.remove('hidden');
   statusEl.className = 'status ocr-loading';
-  statusEl.textContent = 'Preparando imagem (Alto Contraste)...';
+  statusEl.textContent = 'Preparando imagem...';
 
   const img = new Image();
+  const objectURL = URL.createObjectURL(file);
+
   img.onload = () => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    
-    ctx.drawImage(img, 0, 0);
-    
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    
-    for (let i = 0; i < data.length; i += 4) {
-      const luminosidade = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
-      const cor = luminosidade > 128 ? 255 : 0; 
-      data[i] = cor; data[i + 1] = cor; data[i + 2] = cor;
-    }
-    
-    ctx.putImageData(imageData, 0, 0);
-    const base64Image = canvas.toDataURL('image/png');
-    
-    iniciarTesseract(base64Image, statusEl, resultEl, outputEl);
+    iniciarTesseract(img, statusEl, resultEl, outputEl)
+      .catch(err => {
+        console.error('Erro no processamento:', err);
+        statusEl.textContent = 'Erro ao processar imagem.';
+        statusEl.style.color = 'var(--danger)';
+      })
+      .finally(() => {
+        ocrProcessando = false;
+        URL.revokeObjectURL(objectURL);
+      });
   };
-  img.src = URL.createObjectURL(file);
+
+  img.onerror = () => {
+    ocrProcessando = false;
+    URL.revokeObjectURL(objectURL);
+    statusEl.textContent = 'Não foi possível abrir a imagem.';
+    statusEl.style.color = 'var(--danger)';
+  };
+
+  img.src = objectURL;
 }
 
-function iniciarTesseract(imgBase64, statusEl, resultEl, outputEl) {
-  statusEl.textContent = 'Lendo imagem...';
 
-  Tesseract.recognize(imgBase64, 'por', {
+/* ===================== OCR EM DUAS ETAPAS ===================== */
+
+async function iniciarTesseract(img, statusEl, resultEl, outputEl) {
+
+  statusEl.textContent = 'Primeira leitura: identificando chamados...';
+
+  // PRIMEIRA LEITURA: imagem completa
+  const primeiraLeitura = await Tesseract.recognize(
+    img,
+    'por',
+    {
       logger: m => {
         if (m.status === 'recognizing text') {
-          statusEl.textContent = `Lendo imagem... ${Math.round(m.progress * 100)}%`;
+          statusEl.textContent =
+            `Identificando chamados... ${Math.round(m.progress * 100)}%`;
         }
       }
-  }).then(({ data: { text } }) => {
-    console.log('TEXTO BRUTO RECONHECIDO PELO OCR:', text);
-    statusEl.textContent = 'Formatando dados...';
-    const chamados = extrairDados(text);
-    
-    if (chamados.length > 0) {
-      outputEl.value = gerarTSV(chamados);
-      adicionarAoHistorico(chamados);
-      resultEl.classList.remove('hidden');
-      statusEl.classList.add('hidden');
-    } else {
-      statusEl.innerHTML = 'Não foi possível ler a imagem. Tente novamente com uma imagem mais nítida.';
-      statusEl.style.color = 'var(--danger)';
     }
-  }).catch(err => {
-    console.error(err);
-    statusEl.textContent = 'Erro ao ler a imagem. Tente novamente.';
+  );
+
+  const texto = primeiraLeitura.data.text;
+
+  console.log('PRIMEIRA LEITURA:', texto);
+
+  const chamados = extrairDados(texto);
+
+  if (chamados.length === 0) {
+    statusEl.textContent =
+      'Não foram encontrados chamados válidos na imagem.';
     statusEl.style.color = 'var(--danger)';
-  }).finally(() => {
-    ocrProcessando = false;
-  });
+    return;
+  }
+
+  // SEGUNDA LEITURA: recorte individual dos protocolos
+  for (let i = 0; i < chamados.length; i++) {
+
+    const chamado = chamados[i];
+
+    statusEl.textContent =
+      `Conferindo protocolo ${i + 1} de ${chamados.length}...`;
+
+    try {
+
+      const protocolo = await reconhecerProtocoloNoRecorte(
+        img,
+        primeiraLeitura.data,
+        chamado
+      );
+
+      // A segunda leitura tem prioridade
+      if (protocolo) {
+        chamado.os = protocolo;
+      }
+
+    } catch (erro) {
+      console.error(
+        'Erro ao reconhecer protocolo:',
+        chamado.veiculo,
+        erro
+      );
+    }
+  }
+
+  // Atualiza resultado depois das duas leituras
+  outputEl.value = gerarTSV(chamados);
+
+  adicionarAoHistorico(chamados);
+
+  resultEl.classList.remove('hidden');
+  statusEl.classList.add('hidden');
 }
 
-/* ===================== LOCALIZAÇÃO DA O.S. ===================== */
+/* ===================== IDENTIFICAÇÃO DO PROTOCOLO ===================== */
 
 function normalizarNumeroOS(valor) {
-  let numero = String(valor || '')
+
+  const numero = String(valor || '')
     .toUpperCase()
     .replace(/[OQ]/g, '0')
     .replace(/[IL|]/g, '1')
-    .replace(/\D/g, '');
+    .replace(/[^0-9]/g, '');
 
-  if (
-    numero.length < 5 ||
-    numero.length > 7 ||
-    /^0+$/.test(numero)
-  ) {
+  // Protocolo do TomTicket: normalmente 6 dígitos
+  if (!/^\d{6}$/.test(numero)) {
     return null;
   }
 
-  // Mantém as conversões utilizadas no código original
-  if (numero.startsWith('4104')) {
-    numero = '10' + numero.substring(4);
-  } else if (numero.startsWith('410')) {
-    numero = '10' + numero.substring(3);
-  } else if (numero.length === 5 && numero.startsWith('0')) {
-    numero = '1' + numero;
-  }
+  // Não fazer conversões automáticas de 410 para 10.
+  // O protocolo deve ser preservado conforme identificado.
 
   return numero;
 }
@@ -245,7 +401,7 @@ function normalizarNumeroOS(valor) {
 
 function localizarNumeroOS(linhas, indice, veiculo) {
 
-  // Procura na linha atual, nas duas anteriores e nas duas seguintes
+  // Examina a linha do chamado e linhas próximas
   const indices = [];
 
   for (let distancia = 0; distancia <= 2; distancia++) {
@@ -259,58 +415,86 @@ function localizarNumeroOS(linhas, indice, veiculo) {
     }
   }
 
+  // Prioridade 1: número precedido pelo símbolo #
+  for (const i of indices) {
+
+    const linha = linhas[i];
+
+    const encontrados = linha.matchAll(
+      /#\s*([0-9OQIL|]{6})/gi
+    );
+
+    for (const encontrado of encontrados) {
+
+      const numero = normalizarNumeroOS(encontrado[1]);
+
+      if (numero && numero !== String(veiculo)) {
+        return numero;
+      }
+    }
+  }
+
+  // Prioridade 2: protocolo identificado por uma palavra
   const textoJanela = indices
     .map(i => linhas[i])
     .join(' ');
 
-  // Primeiro tenta encontrar o número após um identificador conhecido
-  const regexRotulo =
-    /(?:PROTOCOLO|ORDEM\s+DE\s+SERVI[ÇC]O|O\s*\.?\s*S\.?)\D{0,20}([0-9OQIL|]{2,3}[ .]?[0-9OQIL|]{2,4}|[0-9OQIL|]{5,7})/gi;
+  const rotulos = [
+    /PROTOCOLO\D{0,15}([0-9OQIL|]{6})/i,
+    /N[ÚU]MERO\s+DO\s+CHAMADO\D{0,15}([0-9OQIL|]{6})/i
+  ];
 
-  let resultado;
+  for (const regex of rotulos) {
 
-  while ((resultado = regexRotulo.exec(textoJanela)) !== null) {
+    const resultado = textoJanela.match(regex);
 
-    const numero = normalizarNumeroOS(resultado[1]);
+    if (resultado) {
 
-    if (numero && numero !== String(veiculo)) {
-      return numero;
+      const numero = normalizarNumeroOS(resultado[1]);
+
+      if (numero && numero !== String(veiculo)) {
+        return numero;
+      }
     }
   }
 
-  // Se não encontrar pelo rótulo, procura números nas linhas próximas
-  const regexNumeros =
-    /[0-9OQIL|]{5,7}|[0-9OQIL|]{2,3}[ .][0-9OQIL|]{2,4}/g;
+  // Prioridade 3: número de seis dígitos nas linhas próximas
+  const candidatos = [];
 
-  for (const indiceLinha of indices) {
+  for (const i of indices) {
 
-    const linha = linhas[indiceLinha];
+    const linha = linhas[i];
 
-    // Evita pegar o número de outro chamado próximo
+    // Não pegar números pertencentes a outro chamado
     if (
-      indiceLinha !== indice &&
+      i !== indice &&
       /(DVR\s*INOPERANTE|GPS\s*SEM\s*COMUNICA[CÇ][AÃ]O)/i.test(linha)
     ) {
       continue;
     }
 
-    const encontrados = linha.match(regexNumeros) || [];
+    const encontrados = linha.match(
+      /[0-9OQIL|]{6}/g
+    ) || [];
 
-    const numeros = encontrados
-      .map(normalizarNumeroOS)
-      .filter(numero => numero && numero !== String(veiculo));
+    for (const encontrado of encontrados) {
 
-    // Dá preferência aos protocolos iniciados por 10
-    const numeroOS =
-      numeros.find(numero => numero.startsWith('10')) ||
-      numeros[0];
+      const numero = normalizarNumeroOS(encontrado);
 
-    if (numeroOS) {
-      return numeroOS;
+      if (
+        numero &&
+        numero !== String(veiculo) &&
+        !candidatos.includes(numero)
+      ) {
+        candidatos.push(numero);
+      }
     }
   }
 
-  return null;
+  // Prioriza protocolos que começam com 10
+  return candidatos.find(numero => numero.startsWith('10'))
+    || candidatos[0]
+    || null;
 }
 
 /* ===================== EXTRAÇÃO E FORMATAÇÃO ===================== */
