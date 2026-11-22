@@ -2,7 +2,6 @@
 
 let ocrProcessando = false;
 
-// Ao carregar a página, atualiza a mensagem com o que já está salvo
 document.addEventListener('DOMContentLoaded', () => {
   atualizarMensagemAcumulada();
 
@@ -65,8 +64,6 @@ function salvarHistorico(lista) {
   localStorage.setItem('historico_chamados_ocr', JSON.stringify(lista));
 }
 
-// Mantém os chamados em ordem numérica crescente pela O.S.
-// Chamados sem protocolo identificado ficam no final.
 function ordenarChamadosPorOS(chamados) {
   return [...chamados].sort((a, b) => {
     const textoA = String(a.os || '').trim();
@@ -79,8 +76,6 @@ function ordenarChamadosPorOS(chamados) {
   });
 }
 
-// Remove somente repetições do mesmo chamado, não chamados diferentes
-// que tenham recebido o mesmo protocolo provisório na primeira leitura.
 function removerDuplicadosPorIdentidade(chamados) {
   const vistos = new Set();
 
@@ -105,8 +100,7 @@ function adicionarAoHistorico(novosChamados) {
   let adicionou = false;
 
   for (const novo of novosChamados) {
-    // A identidade considera também veículo/data/filial. Não basta comparar
-    // apenas a O.S., pois a primeira leitura pode confundir dois protocolos.
+
     const chaveNovo = [novo.data, novo.veiculo, novo.filial, novo.camera, novo.tipoServico, novo.os || ''].join('|');
     const jaExiste = historico.some(c =>
       [c.data, c.veiculo, c.filial, c.camera, c.tipoServico, c.os || ''].join('|') === chaveNovo
@@ -147,10 +141,9 @@ function atualizarMensagemAcumulada() {
   let mensagem = `Chamados abertos ${dataAtual}:\n\n`;
 
   for (const c of historico) {
-    // Ajusta o nome do equipamento para ficar igual ao seu exemplo
-    let equipamento = c.camera; // CAMERA ou TELEMETRIA
 
-    // Formato: Data \t Veiculo \t OS \t Filial \t Equipamento
+    let equipamento = c.camera;
+
     mensagem += `${c.data}\t${c.veiculo}\t${c.os}\t${c.filial}\t${equipamento}\n`;
   }
 
@@ -159,7 +152,6 @@ function atualizarMensagemAcumulada() {
   txtMsg.value = mensagem;
 }
 
-
 /* ===================== OCR REFORÇADO DO PROTOCOLO ===================== */
 
 async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
@@ -167,7 +159,6 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
   const palavras = dadosOCR.words || [];
   const veiculo = String(chamado.veiculo);
 
-  // Localiza o veículo na primeira leitura
   const palavraVeiculo = palavras.find(p =>
     String(p.text).replace(/\D/g, '') === veiculo
   );
@@ -184,7 +175,6 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
     img.height * 0.008
   );
 
-  // Recorte dinâmico, proporcional ao tamanho da fonte
   const margemSuperior = alturaTexto * 5;
   const margemInferior = alturaTexto * 5;
 
@@ -200,7 +190,6 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
 
   const altura = yFinal - yInicial;
 
-  // Ampliação em 4 vezes
   const escala = 4;
 
   const canvas = document.createElement('canvas');
@@ -227,7 +216,6 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
     canvas.height
   );
 
-  // Cria duas versões para comparação
   const imagemCinza = ctx.getImageData(
     0, 0, canvas.width, canvas.height
   );
@@ -249,12 +237,10 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
       b * 0.114
     );
 
-    // Preserva detalhes na versão em cinza
     imagemCinza.data[i] = cinza;
     imagemCinza.data[i + 1] = cinza;
     imagemCinza.data[i + 2] = cinza;
 
-    // Alto contraste na segunda versão
     const contraste = cinza > 155 ? 255 : 0;
 
     imagemContraste.data[i] = contraste;
@@ -278,7 +264,6 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
     posicaoVertical: yInicial
   });
 
-  // Função para extrair candidatos de seis dígitos
   function extrairProtocolos(texto) {
 
     const normalizado = String(texto || '')
@@ -299,7 +284,6 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
 
   const resultados = [];
 
-  // Primeira tentativa: escala de cinza
   const leitura1 = await Tesseract.recognize(
     baseCinza,
     'eng',
@@ -316,7 +300,6 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
 
   resultados.push(...extrairProtocolos(leitura1.data.text));
 
-  // Segunda tentativa: alto contraste
   const leitura2 = await Tesseract.recognize(
     baseContraste,
     'eng',
@@ -333,7 +316,6 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
 
   resultados.push(...extrairProtocolos(leitura2.data.text));
 
-  // Elimina duplicados
   const candidatos = [...new Set(resultados)];
 
   console.log(
@@ -342,12 +324,10 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
     candidatos
   );
 
-  // Prioriza protocolos no padrão 10xxxx
   return candidatos.find(n => n.startsWith('10'))
     || candidatos[0]
     || null;
 }
-
 
 /* ===================== OCR E PROCESSAMENTO ===================== */
 
@@ -372,7 +352,6 @@ function processarTextoPuro(texto) {
     statusEl.style.color = 'var(--danger)';
   }
 }
-
 
 function processarImagemOCR(file) {
   if (ocrProcessando || !file) return;
@@ -414,14 +393,12 @@ function processarImagemOCR(file) {
   img.src = objectURL;
 }
 
-
 /* ===================== OCR EM DUAS ETAPAS ===================== */
 
 async function iniciarTesseract(img, statusEl, resultEl, outputEl) {
 
   statusEl.textContent = 'Primeira leitura: identificando chamados...';
 
-  // PRIMEIRA LEITURA: imagem completa
   const primeiraLeitura = await Tesseract.recognize(
     img,
     'por',
@@ -448,7 +425,6 @@ async function iniciarTesseract(img, statusEl, resultEl, outputEl) {
     return;
   }
 
-  // SEGUNDA LEITURA: recorte individual dos protocolos
   for (let i = 0; i < chamados.length; i++) {
 
     const chamado = chamados[i];
@@ -464,7 +440,6 @@ async function iniciarTesseract(img, statusEl, resultEl, outputEl) {
         chamado
       );
 
-      // A segunda leitura tem prioridade
       if (protocolo) {
         chamado.os = protocolo;
       }
@@ -478,8 +453,6 @@ async function iniciarTesseract(img, statusEl, resultEl, outputEl) {
     }
   }
 
-  // Só agora, depois de todos os recortes, remove repetições exatas
-  // e ordena pelos protocolos já corrigidos pela segunda leitura.
   const chamadosFinais = removerDuplicadosPorIdentidade(chamados);
   const chamadosOrdenados = ordenarChamadosPorOS(chamadosFinais);
 
@@ -491,7 +464,6 @@ async function iniciarTesseract(img, statusEl, resultEl, outputEl) {
   statusEl.classList.add('hidden');
 }
 
-
 /* ===================== IDENTIFICAÇÃO DO PROTOCOLO ===================== */
 
 function normalizarNumeroOS(valor) {
@@ -502,21 +474,15 @@ function normalizarNumeroOS(valor) {
     .replace(/[IL|]/g, '1')
     .replace(/[^0-9]/g, '');
 
-  // Protocolo do TomTicket: normalmente 6 dígitos
   if (!/^\d{6}$/.test(numero)) {
     return null;
   }
 
-  // Não fazer conversões automáticas de 410 para 10.
-  // O protocolo deve ser preservado conforme identificado.
-
   return numero;
 }
 
-
 function localizarNumeroOS(linhas, indice, veiculo) {
 
-  // Examina a linha do chamado e linhas próximas
   const indices = [];
 
   for (let distancia = 0; distancia <= 2; distancia++) {
@@ -530,7 +496,6 @@ function localizarNumeroOS(linhas, indice, veiculo) {
     }
   }
 
-  // Prioridade 1: número precedido pelo símbolo #
   for (const i of indices) {
 
     const linha = linhas[i];
@@ -549,7 +514,6 @@ function localizarNumeroOS(linhas, indice, veiculo) {
     }
   }
 
-  // Prioridade 2: protocolo identificado por uma palavra
   const textoJanela = indices
     .map(i => linhas[i])
     .join(' ');
@@ -573,14 +537,12 @@ function localizarNumeroOS(linhas, indice, veiculo) {
     }
   }
 
-  // Prioridade 3: número de seis dígitos nas linhas próximas
   const candidatos = [];
 
   for (const i of indices) {
 
     const linha = linhas[i];
 
-    // Não pegar números pertencentes a outro chamado
     if (
       i !== indice &&
       /(DVR\s*INOPERANTE|GPS\s*SEM\s*COMUNICA[CÇ][AÃ]O)/i.test(linha)
@@ -606,12 +568,10 @@ function localizarNumeroOS(linhas, indice, veiculo) {
     }
   }
 
-  // Prioriza protocolos que começam com 10
   return candidatos.find(numero => numero.startsWith('10'))
     || candidatos[0]
     || null;
 }
-
 
 /* ===================== EXTRAÇÃO E FORMATAÇÃO ===================== */
 
@@ -659,7 +619,6 @@ function extrairDados(textoBruto) {
       camera = 'TELEMETRIA';
     }
 
-    // Procura o protocolo também nas linhas próximas
     const osFinal = localizarNumeroOS(linhas, i, veiculo);
 
     chamados.push({
@@ -673,22 +632,17 @@ function extrairDados(textoBruto) {
     });
   }
 
-  // IMPORTANTE: não ordenar nem eliminar duplicados nesta etapa.
-  // O OCR inicial pode confundir protocolos (ex.: 104573 e 104578 como
-  // 110457). Todos os chamados precisam chegar à segunda leitura individual.
   return chamados;
 }
 
 function gerarTSV(chamados) {
   return ordenarChamadosPorOS(chamados).map(c =>
-    `${c.data}\t${c.veiculo}\t${c.os || 'NÃO IDENTIFICADA'}\t${c.filial}\t${c.camera}\t${c.codigo}\t${c.tipoServico}`
+    `${c.data}\t${c.veiculo}\t${c.os || 'NÃO IDENTIFICADA'}\t${c.filial}\t${c.camera}\t${c.codigo}`
   ).join('\n');
 }
 
-
 /* ===================== UTILITÁRIOS ===================== */
 
-// Função genérica para copiar qualquer textarea
 function copiarTexto(idTextarea, event) {
   const textarea = document.getElementById(idTextarea);
   if(!textarea) return;
