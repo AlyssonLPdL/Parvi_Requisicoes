@@ -120,69 +120,58 @@ function atualizarMensagemAcumulada() {
 }
 
 
-/* ===================== RECORTE INTELIGENTE DO PROTOCOLO ===================== */
+
+/* ===================== OCR REFORÇADO DO PROTOCOLO ===================== */
 
 async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
 
   const palavras = dadosOCR.words || [];
-
-  // Procura a posição do veículo na imagem
   const veiculo = String(chamado.veiculo);
 
-  let palavraVeiculo = palavras.find(p =>
-    p.text.replace(/\D/g, '') === veiculo
+  // Localiza o veículo na primeira leitura
+  const palavraVeiculo = palavras.find(p =>
+    String(p.text).replace(/\D/g, '') === veiculo
   );
 
-  // Se não encontrar o veículo, procura o assunto
   if (!palavraVeiculo) {
-
-    const termo = chamado.tipoServico.includes('GPS')
-      ? 'GPS'
-      : 'DVR';
-
-    palavraVeiculo = palavras.find(p =>
-      p.text.toUpperCase().includes(termo)
-    );
-  }
-
-  if (!palavraVeiculo) {
-    console.warn('Não foi possível localizar a linha:', chamado.veiculo);
+    console.warn('Veículo não localizado:', veiculo);
     return null;
   }
 
-  // Coordenadas reais da palavra encontrada
   const box = palavraVeiculo.bbox;
 
-  const alturaPalavra = Math.max(
+  const alturaTexto = Math.max(
     box.y1 - box.y0,
     img.height * 0.008
   );
 
-  // Margem dinâmica: considera a altura real do texto
-  const margemSuperior = alturaPalavra * 4;
-  const margemInferior = alturaPalavra * 3;
+  // Recorte dinâmico, proporcional ao tamanho da fonte
+  const margemSuperior = alturaTexto * 5;
+  const margemInferior = alturaTexto * 5;
 
-  let yInicial = Math.max(
+  const yInicial = Math.max(
     0,
     Math.floor(box.y0 - margemSuperior)
   );
 
-  let yFinal = Math.min(
+  const yFinal = Math.min(
     img.height,
     Math.ceil(box.y1 + margemInferior)
   );
 
-  const alturaRecorte = yFinal - yInicial;
+  const altura = yFinal - yInicial;
 
-  // Recorta toda a largura da imagem
+  // Ampliação em 4 vezes
+  const escala = 4;
+
   const canvas = document.createElement('canvas');
 
-  const escala = 3;
-
   canvas.width = img.width * escala;
-  canvas.height = alturaRecorte * escala;
+  canvas.height = altura * escala;
 
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', {
+    willReadFrequently: true
+  });
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
@@ -192,25 +181,105 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
     0,
     yInicial,
     img.width,
-    alturaRecorte,
+    altura,
     0,
     0,
     canvas.width,
     canvas.height
   );
 
-  console.log('Recorte do protocolo:', {
+  // Cria duas versões para comparação
+  const imagemCinza = ctx.getImageData(
+    0, 0, canvas.width, canvas.height
+  );
+
+  const imagemContraste = ctx.createImageData(
+    canvas.width,
+    canvas.height
+  );
+
+  for (let i = 0; i < imagemCinza.data.length; i += 4) {
+
+    const r = imagemCinza.data[i];
+    const g = imagemCinza.data[i + 1];
+    const b = imagemCinza.data[i + 2];
+
+    const cinza = (
+      r * 0.299 +
+      g * 0.587 +
+      b * 0.114
+    );
+
+    // Preserva detalhes na versão em cinza
+    imagemCinza.data[i] = cinza;
+    imagemCinza.data[i + 1] = cinza;
+    imagemCinza.data[i + 2] = cinza;
+
+    // Alto contraste na segunda versão
+    const contraste = cinza > 155 ? 255 : 0;
+
+    imagemContraste.data[i] = contraste;
+    imagemContraste.data[i + 1] = contraste;
+    imagemContraste.data[i + 2] = contraste;
+    imagemContraste.data[i + 3] = 255;
+  }
+
+  ctx.putImageData(imagemCinza, 0, 0);
+
+  const baseCinza = canvas.toDataURL('image/png');
+
+  ctx.putImageData(imagemContraste, 0, 0);
+
+  const baseContraste = canvas.toDataURL('image/png');
+
+  console.log('PROTOCOLO - RECORTE:', {
     veiculo,
-    imagemOriginal: `${img.width}x${img.height}`,
-    recorte: `${canvas.width}x${canvas.height}`,
-    posicaoY: yInicial
+    tamanhoOriginal: `${img.width}x${img.height}`,
+    tamanhoRecorte: `${canvas.width}x${canvas.height}`,
+    posicaoVertical: yInicial
   });
 
-  const imagemRecortada = canvas.toDataURL('image/png');
+  // Função para extrair candidatos de seis dígitos
+  function extrairProtocolos(texto) {
 
-  // Segunda leitura: prioriza números
-  const resultado = await Tesseract.recognize(
-    imagemRecortada,
+    const normalizado = String(texto || '')
+      .replace(/[OQ]/gi, '0')
+      .replace(/[IL|]/g, '1');
+
+    const encontrados = normalizado.match(
+      /(?:\d[\s.]*){6}/g
+    ) || [];
+
+    return encontrados
+      .map(n => n.replace(/\D/g, ''))
+      .filter(n =>
+        n.length === 6 &&
+        n !== veiculo
+      );
+  }
+
+  const resultados = [];
+
+  // Primeira tentativa: escala de cinza
+  const leitura1 = await Tesseract.recognize(
+    baseCinza,
+    'eng',
+    {
+      tessedit_char_whitelist: '0123456789#',
+      tessedit_pageseg_mode: '11'
+    }
+  );
+
+  console.log(
+    'PROTOCOLO - LEITURA CINZA:',
+    leitura1.data.text
+  );
+
+  resultados.push(...extrairProtocolos(leitura1.data.text));
+
+  // Segunda tentativa: alto contraste
+  const leitura2 = await Tesseract.recognize(
+    baseContraste,
     'eng',
     {
       tessedit_char_whitelist: '0123456789#',
@@ -219,23 +288,23 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
   );
 
   console.log(
-    'SEGUNDA LEITURA DO PROTOCOLO:',
-    resultado.data.text
+    'PROTOCOLO - LEITURA CONTRASTE:',
+    leitura2.data.text
   );
 
-  const texto = resultado.data.text || '';
+  resultados.push(...extrairProtocolos(leitura2.data.text));
 
-  // Procura números de seis dígitos
-  const encontrados = texto.match(
-    /[0-9]{6}/g
-  ) || [];
+  // Elimina duplicados
+  const candidatos = [...new Set(resultados)];
 
-  // Elimina o número do veículo
-  const candidatos = [...new Set(encontrados)]
-    .filter(numero => numero !== veiculo);
+  console.log(
+    'PROTOCOLO - CANDIDATOS:',
+    veiculo,
+    candidatos
+  );
 
-  // Prioriza protocolos iniciados em 10
-  return candidatos.find(numero => numero.startsWith('10'))
+  // Prioriza protocolos no padrão 10xxxx
+  return candidatos.find(n => n.startsWith('10'))
     || candidatos[0]
     || null;
 }
