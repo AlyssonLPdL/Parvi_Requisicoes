@@ -141,10 +141,7 @@ function atualizarMensagemAcumulada() {
   let mensagem = `Chamados abertos ${dataAtual}:\n\n`;
 
   for (const c of historico) {
-
-    let equipamento = c.camera;
-
-    mensagem += `${c.data}\t${c.veiculo}\t${c.os}\t${c.filial}\t${equipamento}\n`;
+    mensagem += `${c.data}\t${c.veiculo}\t${c.os}\t${c.filial}\t${c.tipoServico}\n`;
   }
 
   mensagem += `\nAtt: Alysson leite, ${dataAtual}, 18:00 às 06:00`;
