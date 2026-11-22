@@ -30,7 +30,7 @@ function textoCopy(grupo, tipo) {
   let t = MSG_BASE + '\n\n';
   t += '🔧 ' + nomeEquipamento(tipo) + '\n\n';
   for (const v of grupo.veiculos) {
-    t += 'Veículo ' + v.veiculo + '  —  inoperante há ' + v.tempoFormatado + '\n';
+    t += 'Veículo ' + v.veiculo + '  —  inoperante há ' + v.tempoFormatado + '. Resposta: ' + '\n';
   }
   return t.replace(/\n$/, '');
 }
