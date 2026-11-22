@@ -191,6 +191,7 @@ function iniciarTesseract(imgBase64, statusEl, resultEl, outputEl) {
         }
       }
   }).then(({ data: { text } }) => {
+    console.log('TEXTO BRUTO RECONHECIDO PELO OCR:', text);
     statusEl.textContent = 'Formatando dados...';
     const chamados = extrairDados(text);
     
@@ -212,100 +213,243 @@ function iniciarTesseract(imgBase64, statusEl, resultEl, outputEl) {
   });
 }
 
-/* ===================== EXTRAÇÃO E FORMATAÇÃO ===================== */
-function extrairDados(textoBruto) {
-  const linhas = textoBruto.split('\n').map(l => l.trim()).filter(l => l);
-  const chamados = [];
-  let dataAtual = new Date().toLocaleDateString('pt-BR');
+/* ===================== LOCALIZAÇÃO DA O.S. ===================== */
 
-  for (let i = 0; i < linhas.length; i++) {
-    const linha = linhas[i];
-    
-    const matchData = linha.match(/(\d{2}\/\d{2}\/\d{4})/);
-    if (matchData) dataAtual = matchData[1];
+function normalizarNumeroOS(valor) {
+  let numero = String(valor || '')
+    .toUpperCase()
+    .replace(/[OQ]/g, '0')
+    .replace(/[IL|]/g, '1')
+    .replace(/\D/g, '');
 
-    const matchAssunto = linha.match(/(DVR\s*INOPERANTE|GPS\s*SEM\s*COMUNICA[CÇ][AÃ]O)\s*[-–—]\s*(\d{5,6})\s*[-–—]\s*([A-Z]{2,3})/i);
+  if (
+    numero.length < 5 ||
+    numero.length > 7 ||
+    /^0+$/.test(numero)
+  ) {
+    return null;
+  }
 
-    if (matchAssunto) {
-      const tipoBruto = matchAssunto[1].toUpperCase();
-      const veiculo = matchAssunto[2];
-      const filial = matchAssunto[3];
+  // Mantém as conversões utilizadas no código original
+  if (numero.startsWith('4104')) {
+    numero = '10' + numero.substring(4);
+  } else if (numero.startsWith('410')) {
+    numero = '10' + numero.substring(3);
+  } else if (numero.length === 5 && numero.startsWith('0')) {
+    numero = '1' + numero;
+  }
 
-      let tipoServico = 'DVR INOPERANTE';
-      let codigo = '7';
-      let camera = 'CAMERA';
+  return numero;
+}
 
-      if (tipoBruto.includes('GPS')) {
-        tipoServico = 'GPS SEM COMUNICAÇÃO';
-        codigo = '8';
-        camera = 'TELEMETRIA';
-      }
 
-      let osFinal = null;
-      const matchOSForcado = linha.match(/10\d{4}/);
-      
-      if (matchOSForcado) {
-        osFinal = matchOSForcado[0];
-      } else {
-        const todosNumeros = linha.match(/\d+/g) || [];
-        for (const num of todosNumeros) {
-          if (num !== veiculo && num.length >= 5 && num.length <= 6) {
-              if (num.startsWith('4104')) osFinal = '10' + num.substring(4);
-              else if (num.startsWith('410')) osFinal = '10' + num.substring(3);
-              else if (num.length === 5 && num.startsWith('0')) osFinal = '1' + num;
-              else osFinal = num;
-              break;
-          }
-        }
-      }
+function localizarNumeroOS(linhas, indice, veiculo) {
 
-      chamados.push({
-        data: dataAtual, veiculo, os: osFinal || "000000", filial, camera, codigo, tipoServico
-      });
+  // Procura na linha atual, nas duas anteriores e nas duas seguintes
+  const indices = [];
+
+  for (let distancia = 0; distancia <= 2; distancia++) {
+
+    if (indice - distancia >= 0) {
+      indices.push(indice - distancia);
+    }
+
+    if (distancia > 0 && indice + distancia < linhas.length) {
+      indices.push(indice + distancia);
     }
   }
 
-  // MÁGICA DO BURACO NA SEQUÊNCIA
-  const validos = chamados.filter(c => parseInt(c.os) > 0);
-  const invalidos = chamados.filter(c => parseInt(c.os) === 0);
+  const textoJanela = indices
+    .map(i => linhas[i])
+    .join(' ');
 
-  if (validos.length > 0 && invalidos.length > 0) {
-      validos.sort((a, b) => parseInt(a.os) - parseInt(b.os));
-      const minOS = parseInt(validos[0].os);
-      const maxOS = parseInt(validos[validos.length - 1].os);
-      const osExistentes = new Set(validos.map(c => parseInt(c.os)));
-      const faltantes = [];
-      
-      for (let i = minOS; i <= maxOS; i++) {
-          if (!osExistentes.has(i)) faltantes.push(i);
-      }
-      
-      if (faltantes.length === invalidos.length) {
-          faltantes.sort((a, b) => a - b);
-          for (let i = 0; i < invalidos.length; i++) {
-              invalidos[i].os = faltantes[i].toString();
-          }
-      }
+  // Primeiro tenta encontrar o número após um identificador conhecido
+  const regexRotulo =
+    /(?:PROTOCOLO|ORDEM\s+DE\s+SERVI[ÇC]O|O\s*\.?\s*S\.?)\D{0,20}([0-9OQIL|]{2,3}[ .]?[0-9OQIL|]{2,4}|[0-9OQIL|]{5,7})/gi;
+
+  let resultado;
+
+  while ((resultado = regexRotulo.exec(textoJanela)) !== null) {
+
+    const numero = normalizarNumeroOS(resultado[1]);
+
+    if (numero && numero !== String(veiculo)) {
+      return numero;
+    }
   }
 
+  // Se não encontrar pelo rótulo, procura números nas linhas próximas
+  const regexNumeros =
+    /[0-9OQIL|]{5,7}|[0-9OQIL|]{2,3}[ .][0-9OQIL|]{2,4}/g;
+
+  for (const indiceLinha of indices) {
+
+    const linha = linhas[indiceLinha];
+
+    // Evita pegar o número de outro chamado próximo
+    if (
+      indiceLinha !== indice &&
+      /(DVR\s*INOPERANTE|GPS\s*SEM\s*COMUNICA[CÇ][AÃ]O)/i.test(linha)
+    ) {
+      continue;
+    }
+
+    const encontrados = linha.match(regexNumeros) || [];
+
+    const numeros = encontrados
+      .map(normalizarNumeroOS)
+      .filter(numero => numero && numero !== String(veiculo));
+
+    // Dá preferência aos protocolos iniciados por 10
+    const numeroOS =
+      numeros.find(numero => numero.startsWith('10')) ||
+      numeros[0];
+
+    if (numeroOS) {
+      return numeroOS;
+    }
+  }
+
+  return null;
+}
+
+/* ===================== EXTRAÇÃO E FORMATAÇÃO ===================== */
+function extrairDados(textoBruto) {
+
+  const linhas = String(textoBruto || '')
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l);
+
+  const chamados = [];
+
+  let dataAtual = new Date().toLocaleDateString('pt-BR');
+
+  for (let i = 0; i < linhas.length; i++) {
+
+    const linha = linhas[i];
+
+    const matchData = linha.match(/(\d{2}\/\d{2}\/\d{4})/);
+
+    if (matchData) {
+      dataAtual = matchData[1];
+    }
+
+    const matchAssunto = linha.match(
+      /(DVR\s*INOPERANTE|GPS\s*SEM\s*COMUNICA[CÇ][AÃ]O)\s*[-–—]\s*(\d{5,6})\s*[-–—]\s*([A-Z]{2,3})/i
+    );
+
+    if (!matchAssunto) {
+      continue;
+    }
+
+    const tipoBruto = matchAssunto[1].toUpperCase();
+    const veiculo = matchAssunto[2];
+    const filial = matchAssunto[3];
+
+    let tipoServico = 'DVR INOPERANTE';
+    let codigo = '7';
+    let camera = 'CAMERA';
+
+    if (tipoBruto.includes('GPS')) {
+      tipoServico = 'GPS SEM COMUNICAÇÃO';
+      codigo = '8';
+      camera = 'TELEMETRIA';
+    }
+
+    // Procura o protocolo também nas linhas próximas
+    const osFinal = localizarNumeroOS(linhas, i, veiculo);
+
+    chamados.push({
+      data: dataAtual,
+      veiculo,
+      os: osFinal,
+      filial,
+      camera,
+      codigo,
+      tipoServico
+    });
+  }
+
+  /* ===================== AJUSTE DE SEQUÊNCIA ===================== */
+
+  const validos = chamados.filter(c =>
+    c.os && /^\d+$/.test(String(c.os)) && Number(c.os) > 0
+  );
+
+  const invalidos = chamados.filter(c => !c.os);
+
+  if (validos.length > 0 && invalidos.length > 0) {
+
+    validos.sort((a, b) => Number(a.os) - Number(b.os));
+
+    const minOS = Number(validos[0].os);
+    const maxOS = Number(validos[validos.length - 1].os);
+
+    const osExistentes = new Set(
+      validos.map(c => Number(c.os))
+    );
+
+    const faltantes = [];
+
+    for (let numero = minOS; numero <= maxOS; numero++) {
+
+      if (!osExistentes.has(numero)) {
+        faltantes.push(numero);
+      }
+    }
+
+    // Só preenche quando a quantidade de lacunas for exatamente igual
+    // à quantidade de chamados sem O.S. identificada
+    if (faltantes.length === invalidos.length) {
+
+      faltantes.sort((a, b) => a - b);
+
+      for (let i = 0; i < invalidos.length; i++) {
+        invalidos[i].os = String(faltantes[i]);
+      }
+    }
+  }
+
+  /* ===================== ORDENAÇÃO ===================== */
+
   const todos = [...validos, ...invalidos];
-  todos.sort((a, b) => parseInt(a.os) - parseInt(b.os));
+
+  todos.sort((a, b) => {
+
+    const numeroA = a.os ? Number(a.os) : Infinity;
+    const numeroB = b.os ? Number(b.os) : Infinity;
+
+    return numeroA - numeroB;
+  });
+
+  /* ===================== ELIMINAR DUPLICADOS ===================== */
 
   const uniqueChamados = [];
   const vistos = new Set();
-  for(const c of todos) {
-      if(!vistos.has(c.os)) {
-          vistos.add(c.os);
-          uniqueChamados.push(c);
-      }
+
+  for (const chamado of todos) {
+
+    // Não elimina chamados diferentes só porque não foi possível
+    // identificar o protocolo deles.
+    if (!chamado.os) {
+      uniqueChamados.push(chamado);
+      continue;
+    }
+
+    if (!vistos.has(chamado.os)) {
+      vistos.add(chamado.os);
+      uniqueChamados.push(chamado);
+    }
   }
 
   return uniqueChamados;
 }
 
 function gerarTSV(chamados) {
-  return chamados.map(c => 
-    `${c.data}\t${c.veiculo}\t${c.os}\t${c.filial}\t${c.camera}\t${c.codigo}\t${c.tipoServico}`
+  return chamados.map(c =>
+    `${c.data}\t${c.veiculo}\t${c.os || 'NÃO IDENTIFICADA'}\t${c.filial}\t${c.camera}\t${c.codigo}\t${c.tipoServico}`
   ).join('\n');
 }
 
