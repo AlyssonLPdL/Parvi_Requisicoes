@@ -656,8 +656,8 @@ function renderCopysFilial(chamados) {
     
     // Formata a string: Veiculo; Filial; Equipamento (Problema); O.S.
     const texto = grupos[filial].map(c => {
-      // Define se é DVR ou GPS
-      const equipamento = c.tipoServico.includes('GPS') ? 'GPS' : 'DVR';
+      // Define se é Camera (DVR) ou Telemetria (GPS)
+      const equipamento = c.tipoServico.includes('GPS') ? 'Telemetria' : 'Camera';
       
       // Define o texto do problema
       const problema = c.tipoServico; // "DVR INOPERANTE" ou "GPS SEM COMUNICAÇÃO"
