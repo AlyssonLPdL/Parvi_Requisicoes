@@ -2,7 +2,7 @@
 
 /* ===== Limites (pontos que podem precisar ajuste) ===== */
 const LIMITE_HORAS_GPS = 60;
-const LIMITE_HORAS_DVR = 60; // Ajustado para 12h conforme a regra original
+const LIMITE_HORAS_DVR = 60;
 
 // Adaptado para ler do Map do novo parsers.js
 function buscarAlocacao(alocacaoMap, veiculo) {
@@ -58,8 +58,13 @@ function processarGPS(veic, ctx) {
     return { ...base, horas, filial, aprovado: false, etapa: 'retidos', motivo: 'Retido' };
   }
 
-  // 5. O.S.
+  // 5. O.S. (AQUI ESTAVA O ERRO, AGORA ELE É REJEITADO SE JÁ TIVER ABERTO)
   const aberto = chamadoAberto(ctx.chamados, veic.veiculo, 8);
+  if (aberto) {
+    return { ...base, horas, filial, aprovado: false, etapa: 'os', motivo: 'Chamado já aberto' };
+  }
+
+  // Se passou por tudo e NÃO tem O.S. aberta, está APROVADO para abrir chamado.
   return {
     ...base,
     horas,
@@ -67,8 +72,8 @@ function processarGPS(veic, ctx) {
     filial,
     aprovado: true,
     etapa: 'ok',
-    status: aberto ? 'Aberto' : 'Abrir',
-    motivo: aberto ? 'Chamado aberto' : 'Abrir O.S.'
+    status: 'Abrir',
+    motivo: 'Abrir O.S.'
   };
 }
 
@@ -94,7 +99,7 @@ function processarDVR(veic, ctx) {
   }
 
   // 3. Filial (do LOCALIZADO)
-  const filial = normalizarFilialDVR(aloc.localizado_original); // Note que aqui mudou para _original
+  const filial = normalizarFilialDVR(aloc.localizado_original);
   if (!filial) {
     return { ...base, horas, aprovado: false, etapa: 'filial', motivo: 'Filial não localizada' };
   }
@@ -104,8 +109,13 @@ function processarDVR(veic, ctx) {
     return { ...base, horas, filial, aprovado: false, etapa: 'retidos', motivo: 'Retido' };
   }
 
-  // 5. O.S.
+  // 5. O.S. (AQUI ESTAVA O ERRO, AGORA ELE É REJEITADO SE JÁ TIVER ABERTO)
   const aberto = chamadoAberto(ctx.chamados, veic.veiculo, 7);
+  if (aberto) {
+    return { ...base, horas, filial, aprovado: false, etapa: 'os', motivo: 'Chamado já aberto' };
+  }
+
+  // Se passou por tudo, está APROVADO.
   return {
     ...base,
     horas,
@@ -113,7 +123,7 @@ function processarDVR(veic, ctx) {
     filial,
     aprovado: true,
     etapa: 'ok',
-    status: aberto ? 'Aberto' : 'Abrir',
-    motivo: aberto ? 'Chamado aberto' : 'Abrir O.S.'
+    status: 'Abrir',
+    motivo: 'Abrir O.S.'
   };
 }
