@@ -61,7 +61,7 @@ function processarGPS(veic, ctx) {
   // 5. O.S. (AQUI ESTAVA O ERRO, AGORA ELE É REJEITADO SE JÁ TIVER ABERTO)
   const aberto = chamadoAberto(ctx.chamados, veic.veiculo, 8);
   if (aberto) {
-    return { ...base, horas, filial, aprovado: false, etapa: 'os', motivo: 'Chamado já aberto' };
+    return { ...base, horas, filial, aprovado: false, etapa: 'os', motivo: 'Já aberto' };
   }
 
   // Se passou por tudo e NÃO tem O.S. aberta, está APROVADO para abrir chamado.
@@ -112,7 +112,7 @@ function processarDVR(veic, ctx) {
   // 5. O.S. (AQUI ESTAVA O ERRO, AGORA ELE É REJEITADO SE JÁ TIVER ABERTO)
   const aberto = chamadoAberto(ctx.chamados, veic.veiculo, 7);
   if (aberto) {
-    return { ...base, horas, filial, aprovado: false, etapa: 'os', motivo: 'Chamado já aberto' };
+    return { ...base, horas, filial, aprovado: false, etapa: 'os', motivo: 'Já aberto' };
   }
 
   // Se passou por tudo, está APROVADO.
