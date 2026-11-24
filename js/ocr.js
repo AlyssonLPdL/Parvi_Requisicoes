@@ -654,10 +654,19 @@ function renderCopysFilial(chamados) {
     btn.className = 'btn btn-pequeno';
     btn.textContent = 'Copiar';
     
-    // Formato baseado no seu print: Veiculo; Chamado (OS); Filial; Equipamento (Defeito); Nº O.S
-    const texto = grupos[filial].map(c => 
-      `${c.veiculo}; ${c.os || 'S/N'}; ${c.filial}; ${c.tipoServico}; ${c.os || 'S/N'}`
-    ).join('\n');
+    // Formata a string: Veiculo; Filial; Equipamento (Problema); O.S.
+    const texto = grupos[filial].map(c => {
+      // Define se é DVR ou GPS
+      const equipamento = c.tipoServico.includes('GPS') ? 'GPS' : 'DVR';
+      
+      // Define o texto do problema
+      const problema = c.tipoServico; // "DVR INOPERANTE" ou "GPS SEM COMUNICAÇÃO"
+      
+      // Se a O.S. não foi encontrada, usa 'S/N'
+      const os = c.os || 'S/N';
+
+      return `${c.veiculo}; ${c.filial}; ${equipamento} (${problema}); ${os}`;
+    }).join('\n');
 
     btn.onclick = () => {
       if (navigator.clipboard && navigator.clipboard.writeText) {
