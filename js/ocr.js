@@ -254,13 +254,6 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
 
   const baseContraste = canvas.toDataURL('image/png');
 
-  console.log('PROTOCOLO - RECORTE:', {
-    veiculo,
-    tamanhoOriginal: `${img.width}x${img.height}`,
-    tamanhoRecorte: `${canvas.width}x${canvas.height}`,
-    posicaoVertical: yInicial
-  });
-
   function extrairProtocolos(texto) {
 
     const normalizado = String(texto || '')
@@ -290,11 +283,6 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
     }
   );
 
-  console.log(
-    'PROTOCOLO - LEITURA CINZA:',
-    leitura1.data.text
-  );
-
   resultados.push(...extrairProtocolos(leitura1.data.text));
 
   const leitura2 = await Tesseract.recognize(
@@ -306,20 +294,9 @@ async function reconhecerProtocoloNoRecorte(img, dadosOCR, chamado) {
     }
   );
 
-  console.log(
-    'PROTOCOLO - LEITURA CONTRASTE:',
-    leitura2.data.text
-  );
-
   resultados.push(...extrairProtocolos(leitura2.data.text));
 
   const candidatos = [...new Set(resultados)];
-
-  console.log(
-    'PROTOCOLO - CANDIDATOS:',
-    veiculo,
-    candidatos
-  );
 
   return candidatos.find(n => n.startsWith('10'))
     || candidatos[0]
@@ -340,8 +317,10 @@ function processarTextoPuro(texto) {
   const chamados = extrairDados(texto);
 
   if (chamados.length > 0) {
-    outputEl.value = gerarTSV(chamados);
-    adicionarAoHistorico(chamados);
+    const chamadosOrdenados = ordenarChamadosPorOS(chamados);
+    outputEl.value = gerarTSV(chamadosOrdenados);
+    adicionarAoHistorico(chamadosOrdenados);
+    renderCopysFilial(chamadosOrdenados); // NOVO AQUI
     resultEl.classList.remove('hidden');
     statusEl.classList.add('hidden');
   } else {
@@ -410,9 +389,6 @@ async function iniciarTesseract(img, statusEl, resultEl, outputEl) {
   );
 
   const texto = primeiraLeitura.data.text;
-
-  console.log('PRIMEIRA LEITURA:', texto);
-
   const chamados = extrairDados(texto);
 
   if (chamados.length === 0) {
@@ -456,6 +432,7 @@ async function iniciarTesseract(img, statusEl, resultEl, outputEl) {
   outputEl.value = gerarTSV(chamadosOrdenados);
 
   adicionarAoHistorico(chamadosOrdenados);
+  renderCopysFilial(chamadosOrdenados); // NOVO AQUI
 
   resultEl.classList.remove('hidden');
   statusEl.classList.add('hidden');
@@ -636,6 +613,79 @@ function gerarTSV(chamados) {
   return ordenarChamadosPorOS(chamados).map(c =>
     `${c.data}\t${c.veiculo}\t${c.os || 'NÃO IDENTIFICADA'}\t${c.filial}\t${c.camera}\t${c.codigo}`
   ).join('\n');
+}
+
+/* ===================== NOVO CARD: COPY POR FILIAL ===================== */
+
+function renderCopysFilial(chamados) {
+  const container = document.getElementById('ocr-copys-filial');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!chamados || chamados.length === 0) {
+    container.innerHTML = '<div class="vazio">Nenhum chamado lido.</div>';
+    return;
+  }
+
+  // Agrupa por filial
+  const grupos = {};
+  for (const c of chamados) {
+    const f = c.filial || 'SEM FILIAL';
+    if (!grupos[f]) grupos[f] = [];
+    grupos[f].push(c);
+  }
+
+  // Ordena as filiais alfabeticamente
+  const filiais = Object.keys(grupos).sort();
+
+  for (const filial of filiais) {
+    const div = document.createElement('div');
+    div.className = 'copy-bloco';
+    
+    const header = document.createElement('div');
+    header.className = 'copy-header';
+    
+    const title = document.createElement('span');
+    title.className = 'copy-filial';
+    title.textContent = `Filial ${filial} (${grupos[filial].length})`;
+    header.appendChild(title);
+
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-pequeno';
+    btn.textContent = 'Copiar';
+    
+    // Formato baseado no seu print: Veiculo; Chamado (OS); Filial; Equipamento (Defeito); Nº O.S
+    const texto = grupos[filial].map(c => 
+      `${c.veiculo}; ${c.os || 'S/N'}; ${c.filial}; ${c.tipoServico}; ${c.os || 'S/N'}`
+    ).join('\n');
+
+    btn.onclick = () => {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(texto).then(() => {
+          btn.textContent = 'Copiado!';
+          setTimeout(() => { btn.textContent = 'Copiar'; }, 1500);
+        });
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = texto;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        btn.textContent = 'Copiado!';
+        setTimeout(() => { btn.textContent = 'Copiar'; }, 1500);
+      }
+    };
+    header.appendChild(btn);
+    div.appendChild(header);
+
+    const pre = document.createElement('pre');
+    pre.className = 'copy-preview';
+    pre.textContent = texto;
+    div.appendChild(pre);
+
+    container.appendChild(div);
+  }
 }
 
 /* ===================== UTILITÁRIOS ===================== */
