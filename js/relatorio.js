@@ -5,7 +5,7 @@ const ETAPA_LABEL = {
   alocacao: 'Alocação',
   filial:   'Filial',
   retidos:  'Retidos',
-  os:       'O.S.',
+  os:       'O.S. (Já aberta)', // Nova etapa
   ok:       'Aprovado'
 };
 
@@ -25,10 +25,10 @@ function el(tag, attrs, children) {
 
 function renderResumo(container, resultados) {
   const total = resultados.length;
-  const porEtapa = { tempo: 0, alocacao: 0, filial: 0, retidos: 0 };
+  // Adicionado 'os: 0' aqui
+  const porEtapa = { tempo: 0, alocacao: 0, filial: 0, retidos: 0, os: 0 };
+  
   const aprovados = resultados.filter(r => r.aprovado);
-  const abertos   = aprovados.filter(r => r.status === 'Aberto');
-  const aAbrir    = aprovados.filter(r => r.status === 'Abrir');
 
   for (const r of resultados) {
     if (!r.aprovado && porEtapa[r.etapa] != null) porEtapa[r.etapa]++;
@@ -42,7 +42,8 @@ function renderResumo(container, resultados) {
 
   ul.appendChild(liResumo('Entrada', restantes, null));
 
-  for (const etapa of ['tempo', 'alocacao', 'filial', 'retidos']) {
+  // Adicionado 'os' no loop
+  for (const etapa of ['tempo', 'alocacao', 'filial', 'retidos', 'os']) {
     const removidos = porEtapa[etapa] || 0;
     restantes -= removidos;
     ul.appendChild(liResumo(
@@ -53,14 +54,28 @@ function renderResumo(container, resultados) {
   }
 
   ul.appendChild(liResumo(
-    'Aprovados',
+    'Aprovados (Abrir O.S.)',
     aprovados.length,
     null,
-    aprovados.length + ' (Abrir: ' + aAbrir.length + ' | Aberto: ' + abertos.length + ')'
+    aprovados.length + ' veículo(s)'
   ));
 
   card.appendChild(ul);
   container.appendChild(card);
+}
+
+function liResumo(nome, qtd, removidos, extra) {
+  const li = el('li');
+  li.appendChild(el('span', { text: nome + ': ' }));
+  li.appendChild(el('span', { class: 'num', text: String(qtd) }));
+  if (removidos != null) {
+    li.appendChild(el('span', {
+      class: 'removido',
+      text: '  (−' + removidos + ' removido(s) nesta etapa)'
+    }));
+  }
+  if (extra) li.appendChild(el('span', { text: '  — ' + extra }));
+  return li;
 }
 
 function liResumo(nome, qtd, removidos, extra) {
