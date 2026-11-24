@@ -148,7 +148,7 @@
 
           <div id="ocr-status" class="status hidden" style="text-align: center; margin-bottom: 20px;"></div>
 
-                    <div id="ocr-resultado" class="hidden">
+          <div id="ocr-resultado" class="hidden">
             <div class="input-card mb-2">
               <div class="input-head">
                 <span class="step">✓</span>
@@ -174,6 +174,17 @@
               </div>
               <textarea id="ocr-mensagem" rows="12" spellcheck="false" style="background: var(--surface-alt);"></textarea>
               <button class="btn mt-2" onclick="copiarTexto('ocr-mensagem', event)">Copiar Mensagem</button>
+            </div>
+
+            <div class="input-card mb-2">
+              <div class="input-head">
+                <span class="step">📋</span>
+                <div class="input-titles">
+                  <h2>Copys por Filial (Lote)</h2>
+                  <p>Separe os chamados por filial para colar no sistema</p>
+                </div>
+              </div>
+              <div id="ocr-copys-filial"></div>
             </div>
           </div>
         </div>
