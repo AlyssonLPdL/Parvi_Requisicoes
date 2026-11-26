@@ -2,10 +2,11 @@
 
 const ETAPA_LABEL = {
   tempo:    'Tempo',
+  vendido:  'Vendido',
   alocacao: 'Alocação',
   filial:   'Filial',
   retidos:  'Retidos',
-  os:       'O.S. (Já aberta)', // Nova etapa
+  os:       'O.S. (Já aberta)',
   ok:       'Aprovado'
 };
 
@@ -25,8 +26,7 @@ function el(tag, attrs, children) {
 
 function renderResumo(container, resultados) {
   const total = resultados.length;
-  // Adicionado 'os: 0' aqui
-  const porEtapa = { tempo: 0, alocacao: 0, filial: 0, retidos: 0, os: 0 };
+  const porEtapa = { tempo: 0, vendido: 0, alocacao: 0, filial: 0, retidos: 0, os: 0 };
   
   const aprovados = resultados.filter(r => r.aprovado);
 
@@ -42,8 +42,7 @@ function renderResumo(container, resultados) {
 
   ul.appendChild(liResumo('Entrada', restantes, null));
 
-  // Adicionado 'os' no loop
-  for (const etapa of ['tempo', 'alocacao', 'filial', 'retidos', 'os']) {
+  for (const etapa of ['tempo', 'vendido', 'alocacao', 'filial', 'retidos', 'os']) {
     const removidos = porEtapa[etapa] || 0;
     restantes -= removidos;
     ul.appendChild(liResumo(
