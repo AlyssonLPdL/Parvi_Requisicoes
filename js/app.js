@@ -1,5 +1,6 @@
 'use strict';
 
+/* ===================== ABAS ===================== */
 function ativarAba(nome) {
   document.querySelectorAll('.tab').forEach(b => {
     b.classList.toggle('ativo', b.dataset.tab === nome);
@@ -23,24 +24,33 @@ document.querySelectorAll('.tab').forEach(btn => {
 /* ===================== INSUMOS ===================== */
 function renderInsumos() {
   const ins = carregarInsumos();
+  
   document.getElementById('txt-alocacao').value = ins.alocacao.texto;
   document.getElementById('txt-retidos').value  = ins.retidos.texto;
+  
   const elMot = document.getElementById('txt-motoristas');
   if (elMot) elMot.value = ins.motoristas.texto;
 
+  const elVend = document.getElementById('txt-vendidos'); // NOVO
+  if (elVend) elVend.value = ins.vendidos.texto;
+
   const alarme = document.getElementById('alarme-insumos');
   const partes = [];
+  
   const a1 = textoAlarmeInsumo('Alocação', ins.alocacao);
   const a2 = textoAlarmeInsumo('Retidos',  ins.retidos);
   const a3 = textoAlarmeInsumo('Motoristas', ins.motoristas);
+  const a4 = textoAlarmeInsumo('Vendidos', ins.vendidos); // NOVO
+
   if (a1) partes.push(a1);
   if (a2) partes.push(a2);
   if (a3) partes.push(a3);
+  if (a4) partes.push(a4);
 
   if (partes.length) {
     alarme.hidden = false;
     alarme.textContent = partes.join(' • ');
-    alarme.classList.toggle('vencido', ins.alocacao.vencido || ins.retidos.vencido || ins.motoristas.vencido);
+    alarme.classList.toggle('vencido', ins.alocacao.vencido || ins.retidos.vencido || ins.motoristas.vencido || ins.vendidos.vencido);
   } else {
     alarme.hidden = true;
   }
@@ -52,7 +62,10 @@ if (btnSalvarInsumos) {
     const aloc = document.getElementById('txt-alocacao').value;
     const ret  = document.getElementById('txt-retidos').value;
     const mot  = document.getElementById('txt-motoristas') ? document.getElementById('txt-motoristas').value : '';
-    salvarInsumos(aloc, ret, mot);
+    const vend = document.getElementById('txt-vendidos') ? document.getElementById('txt-vendidos').value : '';
+    
+    salvarInsumos(aloc, ret, mot, vend);
+    
     const st = document.getElementById('status-insumos');
     st.textContent = 'Salvos em ' + new Date().toLocaleString('pt-BR');
     setTimeout(() => { st.textContent = ''; }, 4000);
@@ -75,10 +88,7 @@ function processar(tipo) {
 
   const alocacao = parseAlocacao(ins.alocacao.texto);
   const retidos  = parseRetidos(ins.retidos.texto);
-
-  // DEBUG: Mostra no console se a alocação leu os veículos certos
-  console.log("Alocação carregada com " + (alocacao.size || 0) + " itens.");
-  console.log("Primeiros 5 veículos na alocação:", Array.from(alocacao.keys()).slice(0, 5));
+  const vendidos = parseRetidos(ins.vendidos.texto); // Reutiliza a mesma lógica de retidos (array de veículos)
 
   if (!alocacao || alocacao.size === 0) {
     alert('Nenhum registro de alocação encontrado. Salve a alocação na aba Insumos.');
@@ -95,7 +105,7 @@ function processar(tipo) {
   }
 
   const chamados = parseChamados(chamTexto);
-  const ctx = { alocacao, retidos, chamados };
+  const ctx = { alocacao, retidos, chamados, vendidos };
   const proc = tipo === 'gps' ? processarGPS : processarDVR;
 
   const resultados = veiculos.map(v => proc(v, ctx));
